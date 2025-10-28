@@ -1,0 +1,11 @@
+# Gradle and build
+/.gradle/
+/build/
+
+# IDE
+/.idea/
+*.iml
+
+# Ignore all source trees under src/test (as requested)
+/src/test/
+
