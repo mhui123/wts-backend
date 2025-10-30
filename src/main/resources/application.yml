@@ -30,6 +30,30 @@ spring:
       enabled: true
       path: /h2-console
 
+  # --- Google OAuth2 client 등록 샘플 ---
+  # 실제로는 Google Cloud Console에서 OAuth 2.0 클라이언트 ID를 생성하고
+  # CLIENT_ID/CLIENT_SECRET을 환경변수로 설정하세요.
+  # Redirect URI 예시: http://localhost:9789/login/oauth2/code/google
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: 1040121320033-hr7lrmoliq2cjratu6kjgdjdskh4fcf3.apps.googleusercontent.com
+            client-secret: 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
+            scope:
+              - openid
+              - profile
+              - email
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            authorization-grant-type: authorization_code
+        provider:
+          google:
+            authorization-uri: https://accounts.google.com/o/oauth2/v2/auth
+            token-uri: https://www.googleapis.com/oauth2/v4/token
+            user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+            user-name-attribute: sub
+
 logging:
   level:
     root: INFO

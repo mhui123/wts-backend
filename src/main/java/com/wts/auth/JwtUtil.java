@@ -58,8 +58,48 @@ public class JwtUtil {
         }
     }
 
+    // 토큰 유효성 검사(서명 + 만료)
+    public boolean validateToken(String token) {
+        try {
+            String[] parts = token.split("\\.");
+            if (parts.length != 3) return false;
+            String signingInput = parts[0] + "." + parts[1];
+            String expectedSig = signHmacSha256(signingInput, secret);
+            if (!expectedSig.equals(parts[2])) return false;
+
+            // exp 확인
+            String payloadJson = new String(base64UrlDecode(parts[1]), StandardCharsets.UTF_8);
+            Map<?,?> payload = objectMapper.readValue(payloadJson, Map.class);
+            Object expObj = payload.get("exp");
+            if (expObj == null) return false;
+            long exp = Long.parseLong(String.valueOf(expObj));
+            long now = Instant.now().getEpochSecond();
+            return now < exp;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    // subject 추출
+    public String getSubject(String token) {
+        try {
+            String[] parts = token.split("\\.");
+            if (parts.length != 3) return null;
+            String payloadJson = new String(base64UrlDecode(parts[1]), StandardCharsets.UTF_8);
+            Map<?,?> payload = objectMapper.readValue(payloadJson, Map.class);
+            Object subObj = payload.get("sub");
+            return subObj != null ? String.valueOf(subObj) : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private static String base64UrlEncode(byte[] data) {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(data);
+    }
+
+    private static byte[] base64UrlDecode(String data) {
+        return Base64.getUrlDecoder().decode(data);
     }
 
     private static String signHmacSha256(String data, String secret) throws Exception {

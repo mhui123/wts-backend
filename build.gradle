@@ -22,6 +22,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-security'
 
+    // OAuth2 client
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+
     // JPA (blocking) + H2 for dev
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     runtimeOnly 'com.h2database:h2'
