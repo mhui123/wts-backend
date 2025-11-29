@@ -22,6 +22,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-security'
 
+    // 런타임에만 필요하면 runtimeOnly 권장
+    runtimeOnly 'mysql:mysql-connector-java:8.0.33'
+
     // OAuth2 client
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
 
