@@ -52,7 +52,7 @@ public class KiwoomAuthService {
                     .uri(probePath)
                     .headers(h -> {
                         h.setBearerAuth(kiwoomToken);
-                        h.add("api-id", "kt00001"); // api id kt00001로 요청
+                        h.add("api-id", "kt00001"); // api id kt00001로 요청 (예수금상세현뢍요청)
                     })
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(Map.of("qry_tp", "3"))

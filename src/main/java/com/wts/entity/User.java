@@ -1,13 +1,19 @@
 package com.wts.entity;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "users")
+@Table(name = "wts_users")
+@Getter
+@Setter
 public class User {
 
     @Id
+    @Column(name = "user_id")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
@@ -37,7 +43,6 @@ public class User {
         this.name = name;
         this.pictureUrl = pictureUrl;
         this.roles = "ROLE_USER";
-        this.enabled = true;
     }
 
     @PrePersist
@@ -52,38 +57,6 @@ public class User {
         updatedAt = LocalDateTime.now();
     }
 
-    // getters / setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
 
-    public String getProvider() { return provider; }
-    public void setProvider(String provider) { this.provider = provider; }
-
-    public String getProviderId() { return providerId; }
-    public void setProviderId(String providerId) { this.providerId = providerId; }
-
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
-
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-
-    public String getPictureUrl() { return pictureUrl; }
-    public void setPictureUrl(String pictureUrl) { this.pictureUrl = pictureUrl; }
-
-    public String getRoles() { return roles; }
-    public void setRoles(String roles) { this.roles = roles; }
-
-    public boolean isEnabled() { return enabled; }
-    public void setEnabled(boolean enabled) { this.enabled = enabled; }
-
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
-
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
-
-    public LocalDateTime getLastLoginAt() { return lastLoginAt; }
-    public void setLastLoginAt(LocalDateTime lastLoginAt) { this.lastLoginAt = lastLoginAt; }
 }
 
