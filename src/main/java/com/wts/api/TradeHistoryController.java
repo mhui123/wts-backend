@@ -1,5 +1,6 @@
 package com.wts.api;
 
+import com.wts.model.DashboardSummaryDto;
 import com.wts.model.TradeHistoryDto;
 import com.wts.service.TradeHistoryService;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -22,8 +23,8 @@ public class TradeHistoryController {
         this.service = service;
     }
 
-    @GetMapping("/getTradesHistory")
-    public ResponseEntity<List<TradeHistoryDto>> getTradesHistory(
+    @GetMapping("/getTradesHistoryRenew")
+    public ResponseEntity<List<TradeHistoryDto>> getTradesHistoryRenew(
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
@@ -32,8 +33,15 @@ public class TradeHistoryController {
             @RequestParam(required = false, defaultValue = "0") Integer page,
             @RequestParam(required = false, defaultValue = "100") Integer size
     ) {
-        List<TradeHistoryDto> list = service.getTrades(userId, fromDate, toDate, tradeType, symbolName, page, size);
+        List<TradeHistoryDto> list = service.getTrades_renew(userId, fromDate, toDate, tradeType, symbolName, page, size);
         return ResponseEntity.ok(list);
     }
-}
 
+    @GetMapping("/getDashSummary")
+    public ResponseEntity<DashboardSummaryDto> getDashSummary(@RequestParam(required = false) Long userId) {
+        DashboardSummaryDto dto = service.getDashboardSummary(userId);
+        return ResponseEntity.ok(dto);
+    }
+
+
+}
