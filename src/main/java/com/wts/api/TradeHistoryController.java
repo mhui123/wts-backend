@@ -2,6 +2,7 @@ package com.wts.api;
 
 import com.wts.model.DashboardSummaryDto;
 import com.wts.model.TradeHistoryDto;
+import com.wts.service.DashboardService;
 import com.wts.service.TradeHistoryService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -18,8 +19,10 @@ import java.util.List;
 public class TradeHistoryController {
 
     private final TradeHistoryService service;
+    private final DashboardService dashboardService;
 
-    public TradeHistoryController(TradeHistoryService service) {
+    public TradeHistoryController(TradeHistoryService service, DashboardService dashboardService) {
+        this.dashboardService = dashboardService;
         this.service = service;
     }
 
@@ -39,7 +42,7 @@ public class TradeHistoryController {
 
     @GetMapping("/getDashSummary")
     public ResponseEntity<DashboardSummaryDto> getDashSummary(@RequestParam(required = false) Long userId) {
-        DashboardSummaryDto dto = service.getDashboardSummary(userId);
+        DashboardSummaryDto dto = dashboardService.getCardSummaryInfo(userId); //service.getDashboardSummary(userId);
         return ResponseEntity.ok(dto);
     }
 

@@ -8,7 +8,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -32,6 +31,17 @@ public interface TradeHistoryRepository extends JpaRepository<TradeHistory, Long
             "ORDER BY t.tradeDate DESC, t.trHistId DESC")
     Optional<TradeHistory> findFirstByUser_IdAndSymbolNameContainingAndTradeTypeInOrderByTradeDateDescTrHistIdDesc(
             Long userId, String symbolName, List<String> types);
+
+    @Query(value=
+            "select th.trade_type, th.symbol_name, " +
+                    " sum(th.amount_krw ) as total_amount_krw, sum(th.amount_usd) as total_amount_usd, sum(th.quantity) as quantity " +
+                    " from stockdb.trade_history th " +
+                    " where 1=1" +
+                    " and th.user_id = :userId " +
+                    " and th.trade_type In (:types) " +
+                    " group by th.symbol_name, th.trade_type " +
+                    " order by th.symbol_name ", nativeQuery = true)
+    List<Object[]> findByUser_IdTotalDiv(@Param("userId") Long userId, @Param("types") List<String> types);
 
     @Query(value =
             "SELECT symbolName, MAX(quantity) AS quantity, MAX(sum_k) AS sumK, MAX(sum_u) AS sumU FROM ( " +

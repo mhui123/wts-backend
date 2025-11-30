@@ -1,5 +1,6 @@
 package com.wts.model;
 
+import com.wts.entity.DashboardDetail;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -15,7 +16,12 @@ public class DashboardSummaryDto {
     // 총 투자금(USD 기준)
     private BigDecimal totalInvestmentKrw;
     private BigDecimal totalInvestmentUsd;
+    private BigDecimal totalDividendKrw;
+    private BigDecimal totalDividendUsd;
+    private BigDecimal totalProfitKrw;
+    private BigDecimal totalProfitUsd;
     private List<Optional<DashboardStockDto>> stockList;
+    private List<DashboardDetail> detailList;
 
     // 추후 필요시 KRW 환산값 등을 추가 가능
 }
