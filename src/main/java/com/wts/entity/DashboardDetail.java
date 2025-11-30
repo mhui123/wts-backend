@@ -8,7 +8,10 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "dashboard_detail", uniqueConstraints = {@UniqueConstraint(columnNames = {"user_id", "trade_type", "symbol_name"})})
+@Table(name = "dashboard_detail",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "ux_user_trade_symbol", columnNames = {"user_id", "trade_type", "symbol_name"})
+        })
 @Getter
 @Setter
 public class DashboardDetail {
@@ -19,7 +22,7 @@ public class DashboardDetail {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    @Column(name = "symbol_name", length = 255, nullable = false, unique = true)
+    @Column(name = "symbol_name", length = 255, nullable = false)
     private String symbolName;
 
     @Column(name = "ticker", length = 100)

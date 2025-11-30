@@ -116,54 +116,41 @@ public class DashboardService {
         //trade_history로부터 데이터를 얻어와서 계산.
         List<String> types = List.of("외화증권배당금입금", "구매", "판매");
         List<Object[]> rawList = thRepository.findByUser_IdTotalDiv(userId, types);
-        List<DashboardDetail> dList = convertToDetailList(rawList);
-        List<DashboardDetail> mutable = new ArrayList<>(dList);
+        List<DashboardDetail> dList = new ArrayList<>(convertToDetailList(rawList));//convertToDetailList(rawList);
+
 
         Map<String, BigDecimal> netBySymbol = calcNetBySymbolStream(dList);
 
-//        List<String> symbols = dList.stream()
-//                .map(DashboardDetail::getSymbolName)
-//                .filter(Objects::nonNull)
-//                .distinct().toList();
-        // 배당금입금 분리
-        List<DashboardDetail> dividends = dList.stream()
-                .filter(d -> "외화증권배당금입금".equals(d.getTradeType()))
-                .toList();
-        mutable.removeIf(d -> "외화증권배당금입금".equals(d.getTradeType()));
-        dList = mutable;
-
-
         for (int i = 0; i < dList.size(); i++) {
             DashboardDetail d = dList.get(i);
-            d.setUserId(userId);
-            DashboardDetail saved = dashboardDetailService.saveOrUpdate(d); // saveOrUpdate는 REQUIRES_NEW로 실행되어야 함
-            if (saved != null) {
-                dList.set(i, saved); // DB에서 영속화된 엔티티(id 포함)로 교체
+            String tradeType = d.getTradeType();
+
+            if ("외화증권배당금입금".equals(tradeType)) {
+                BigDecimal divK = d.getTotalAmountKrw();
+                BigDecimal divU = d.getTotalAmountUsd();
+                d.setDividendKrw(divK);
+                d.setDividendUsd(divU);
+                d.setTotalAmountKrw(BigDecimal.ZERO);
+                d.setTotalAmountUsd(BigDecimal.ZERO);
+
+                String symbol = d.getSymbolName();
+                BigDecimal netQuantity = netBySymbol.getOrDefault(symbol, BigDecimal.ZERO);
+                d.setQuantity(netQuantity);
             }
-        }
 
-        for (int i = 0; i < dividends.size(); i++) {
-            DashboardDetail d = dividends.get(i);
-            BigDecimal divK = d.getTotalAmountKrw();
-            BigDecimal divU = d.getTotalAmountUsd();
-            d.setDividendKrw(divK);
-            d.setDividendUsd(divU);
-            d.setTotalAmountKrw(BigDecimal.ZERO);
-            d.setTotalAmountUsd(BigDecimal.ZERO);
-
-            String symbol = d.getSymbolName();
-            BigDecimal netQuantity = netBySymbol.getOrDefault(symbol, BigDecimal.ZERO);
-            d.setQuantity(netQuantity);
             d.setUserId(userId);
 
-            // 저장 및 반환값으로 대체
+            // 한 번만 저장하고, 반환된 영속 엔티티로 리스트를 교체
             DashboardDetail saved = dashboardDetailService.saveOrUpdate(d);
             if (saved != null) {
-                dividends.set(i, saved);
+                dList.set(i, saved);
             }
 
-            totalUsd = totalUsd.add(d.getDividendUsd() != null ? d.getDividendUsd() : BigDecimal.ZERO);
-            totalKrw = totalKrw.add(d.getDividendKrw() != null ? d.getDividendKrw() : BigDecimal.ZERO);
+            // 배당 합계는 저장된 객체의 값으로 집계
+            if ("외화증권배당금입금".equals(tradeType)) {
+                totalUsd = totalUsd.add(saved != null && saved.getDividendUsd() != null ? saved.getDividendUsd() : BigDecimal.ZERO);
+                totalKrw = totalKrw.add(saved != null && saved.getDividendKrw() != null ? saved.getDividendKrw() : BigDecimal.ZERO);
+            }
         }
 
         info.setTotalDividendUsd(totalUsd);
