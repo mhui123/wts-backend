@@ -35,6 +35,7 @@ public interface TradeHistoryRepository extends JpaRepository<TradeHistory, Long
     @Query(value=
             "select th.trade_type, th.symbol_name, " +
                     " sum(th.amount_krw ) as total_amount_krw, sum(th.amount_usd) as total_amount_usd, sum(th.quantity) as quantity " +
+                    " , avg(th.price_krw) as avg_price_krw, avg(th.price_usd) as avg_price_usd " +
                     " from stockdb.trade_history th " +
                     " where 1=1" +
                     " and th.user_id = :userId " +
@@ -43,35 +44,15 @@ public interface TradeHistoryRepository extends JpaRepository<TradeHistory, Long
                     " order by th.symbol_name ", nativeQuery = true)
     List<Object[]> findByUser_IdTotalDiv(@Param("userId") Long userId, @Param("types") List<String> types);
 
-    @Query(value =
-            "SELECT symbolName, MAX(quantity) AS quantity, MAX(sum_k) AS sumK, MAX(sum_u) AS sumU FROM ( " +
-                    "  ( " +
-                    "    SELECT th.symbol_name AS symbolName, th.balance_qty AS quantity, NULL AS sum_k, NULL AS sum_u " +
-                    "    FROM stockdb.trade_history th " +
-                    "    WHERE th.user_id = :userId " +
-                    "    AND th.symbol_name = :symbolPattern   "+
-                    "      AND th.trade_type IN (:types) " +
-                    "    ORDER BY th.trade_date DESC, th.tr_hist_id DESC " +
-                    "    LIMIT 1 " +
-                    "  ) " +
-                    "  UNION ALL " +
-                    "  ( " +
-                    "    SELECT th.symbol_name AS symbolName, NULL AS quantity, SUM(th.amount_krw) AS sum_k, SUM(th.amount_usd) AS sum_u " +
-                    "    FROM stockdb.trade_history th " +
-                    "    WHERE th.user_id = :userId " +
-                    "      AND th.symbol_name = :symbolPattern " +
-                    "      AND th.trade_type LIKE :dividendPattern " +
-                    "    GROUP BY th.symbol_name " +
-                    "  ) " +
-                    ") T " +
-                    "GROUP BY symbolName",
-            nativeQuery = true)
-    List<com.wts.model.SymbolAggregation> findCombinedByUserIdAndSymbolPatternAndTypes(
-            @Param("userId") Long userId,
-            @Param("symbolPattern") String symbolPattern,
-            @Param("types") List<String> types,
-            @Param("dividendPattern") String dividendPattern
-    );
+    @Query(value=
+            "select th.trade_date, th.trade_type, th.symbol_name, th.quantity, th.amount_krw, th.amount_usd, th.price_krw , th.price_usd, " +
+                    " th.fee_krw , th.fee_usd , th.tax_krw , th.tax_usd " +
+                    " from trade_history th " +
+                    " where th.user_id = :userId " +
+                    " and th.symbol_name in( :symbols ) " +
+                    " and th.trade_type in ( :types ) " +
+                    " order by th.symbol_name, th.trade_date ", nativeQuery = true)
+    List<Object[]> getTrList(@Param("userId") Long userId, @Param("symbols") List<String> symbols, @Param("types") List<String> types);
 
 
 }

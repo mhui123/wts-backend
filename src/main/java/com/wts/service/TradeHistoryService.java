@@ -33,63 +33,10 @@ public class TradeHistoryService {
         this.repository = repository;
     }
 
-    /**
-     * Dashboard summary: 총 투자금(USD 기준)을 반환합니다.
-     * tradeType='환전외화입금'인 레코드의 amountUsd 합계를 계산합니다.
-     * userId가 제공되면 해당 사용자의 합계만 반환합니다.
-     */
-    public DashboardSummaryDto getDashboardSummary(Long userId) {
-        String type = "환전외화입금";
-        SummaryRecord r;
-        BigDecimal totalUsd;
-        BigDecimal totalKrw;
-        if (userId != null) {
-            r = repository.sumAmountByTradeTypeAndUserId(type, userId);
-        } else {
-            r = repository.sumAmountUsdByTradeType(type);
-        }
-        if (r == null) {
-            totalUsd = BigDecimal.ZERO;
-            totalKrw = BigDecimal.ZERO;
-        } else {
-            totalUsd = r.sumUsd() != null ? r.sumUsd() : BigDecimal.ZERO;
-            totalKrw = r.sumKrw() != null ? r.sumKrw() : BigDecimal.ZERO;
-        }
-
-        List<String> stockList = new ArrayList<>(); // 추후 필요시 구현
-        List<String> types = List.of("구매", "판매");
-        stockList = repository.findDistinctSymbolNameByUserIdAndTradeTypeIn(userId, types);
-
-        List<Optional<DashboardStockDto>> dtoList = new ArrayList<>();
-        for(String n : stockList) {
-            Optional<DashboardStockDto> dto = findLatestSymbolQuantity_new(userId, n,types);
-            dtoList.add(dto);
-        }
-        return DashboardSummaryDto.builder()
-                .totalInvestmentUsd(totalUsd)
-                .totalInvestmentKrw(totalKrw)
-                .stockList(dtoList)
-                .build();
-    }
-
     public Optional<DashboardStockDto> findLatestSymbolQuantity(Long userId, String symbolNamePattern, List<String> types) {
         Optional<TradeHistory> opt = repository.findFirstByUser_IdAndSymbolNameContainingAndTradeTypeInOrderByTradeDateDescTrHistIdDesc(
                 userId, symbolNamePattern, types);
         return opt.map(t -> new DashboardStockDto(t.getSymbolName(), t.getBalanceQty()));
-    }
-
-    public Optional<DashboardStockDto> findLatestSymbolQuantity_new(Long userId, String symbolNamePattern, List<String> types) {
-
-        List<SymbolAggregation> aggs = repository.findCombinedByUserIdAndSymbolPatternAndTypes(
-                userId, symbolNamePattern, types, "%배당금입금");
-
-        // 최신 레코드가 없으면 aggregation 리스트의 첫 항목 사용 혹은 빈 반환
-        return aggs.stream().findFirst().map(sa -> new DashboardStockDto(
-                sa.getSymbolName(),
-                sa.getQuantity() != null ? sa.getQuantity() : BigDecimal.ZERO,
-                sa.getSumK() != null ? sa.getSumK() : BigDecimal.ZERO,
-                sa.getSumU() != null ? sa.getSumU() : BigDecimal.ZERO
-        ));
     }
 
     /**
@@ -162,6 +109,4 @@ public class TradeHistoryService {
                         .build())
                 .collect(Collectors.toList());
     }
-
-
 }

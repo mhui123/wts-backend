@@ -46,5 +46,10 @@ public class TradeHistoryController {
         return ResponseEntity.ok(dto);
     }
 
+    @GetMapping("/getDashTest")
+    public ResponseEntity<String> getDashSummaryTest(@RequestParam(name = "userId", required = false) Long userId) {
+        dashboardService.calDetailProfit(userId);
+        return ResponseEntity.ok("OK");
+    }
 
 }
