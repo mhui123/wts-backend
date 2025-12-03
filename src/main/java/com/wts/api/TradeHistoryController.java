@@ -1,6 +1,7 @@
 package com.wts.api;
 
 import com.wts.model.DashboardSummaryDto;
+import com.wts.model.PortfolioItemDto;
 import com.wts.model.TradeHistoryDto;
 import com.wts.service.DashboardService;
 import com.wts.service.TradeHistoryService;
@@ -41,14 +42,17 @@ public class TradeHistoryController {
     }
 
     @GetMapping("/getDashSummary")
-    public ResponseEntity<DashboardSummaryDto> getDashSummary(@RequestParam(required = false) Long userId) {
-        DashboardSummaryDto dto = dashboardService.getCardSummaryInfo(userId); //service.getDashboardSummary(userId);
-        return ResponseEntity.ok(dto);
+    public ResponseEntity<DashboardSummaryDto> getDashboardData(@RequestParam(required = false) Long userId) {
+        DashboardSummaryDto summary = dashboardService.getDashboardData(userId); //service.getDashboardSummary(userId);
+//        return ResponseEntity.ok(dto);
+        return ResponseEntity.ok(summary);
     }
 
     @GetMapping("/getDashTest")
     public ResponseEntity<String> getDashSummaryTest(@RequestParam(name = "userId", required = false) Long userId) {
-        dashboardService.calDetailProfit(userId);
+//        dashboardService.calDetailProfit(userId);
+//        dashboardService.setDataIntoDashboardInfoAndReturnData(userId);
+        dashboardService.setDataToPortfolioItem(userId);
         return ResponseEntity.ok("OK");
     }
 

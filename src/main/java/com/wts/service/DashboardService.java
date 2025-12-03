@@ -2,10 +2,12 @@ package com.wts.service;
 
 import com.wts.entity.DashboardDetail;
 import com.wts.entity.DashboardInfo;
+import com.wts.entity.PortfolioItem;
 import com.wts.entity.TradeHistory;
 import com.wts.model.*;
 import com.wts.repository.DashboardDetailRepository;
 import com.wts.repository.DashboardInfoRepository;
+import com.wts.repository.PortfolioItemRepository;
 import com.wts.repository.TradeHistoryRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -26,189 +28,173 @@ public class DashboardService {
     private EntityManager em;
 
     private final TradeHistoryRepository thRepository;
-    private final DashboardInfoRepository dashboardInfoRepository;
-    private final DashboardDetailRepository dashboardDetailRepository;
+    private final PortfolioItemRepository pRepo;
     @Autowired
     private DashboardDetailService dashboardDetailService;
 
-    public DashboardService(DashboardInfoRepository d, DashboardDetailRepository dashboardDetailRepository, TradeHistoryRepository thRepository) {
-        this.dashboardInfoRepository = d;
-        this.dashboardDetailRepository = dashboardDetailRepository;
+    public DashboardService(TradeHistoryRepository thRepository, PortfolioItemRepository portfolioItemRepository) {
         this.thRepository = thRepository;
-    }
-    public DashboardSummaryDto getCardSummaryInfo(Long userId){
-        //기존 데이터 조회
-        Optional<DashboardInfo> dashInfo = dashboardInfoRepository.findByUserId(userId);
-        if(dashInfo.isPresent()) {
-            DashboardInfo info = dashInfo.get();
-            List<DashboardDetail> dList = dashboardDetailRepository.findByUserId(userId);
-            if(dList.isEmpty()){
-                dList = calculateDetail(info);
-            }
-            return DashboardSummaryDto.builder()
-                    .totalInvestmentKrw(info.getTotalInvestmentKrw())
-                    .totalInvestmentUsd(info.getTotalInvestmentUsd())
-                    .totalDividendKrw(info.getTotalDividendKrw())
-                    .totalDividendUsd(info.getTotalDividendUsd())
-                    .totalProfitKrw(info.getTotalProfitLossKrw())
-                    .totalProfitUsd(info.getTotalProfitLossUsd())
-                    .detailList(dList)
-                    .build();
-        } else {
-            return setDataIntoDashboardInfoAndReturnData(userId);
-        }
+        this.pRepo = portfolioItemRepository;
     }
 
-    public DashboardSummaryDto setDataIntoDashboardInfoAndReturnData(Long userId){
-        //데이터가 없으므로 거래내역에서 데이터를 처리해 dashboard_info에 입력 후 화면단으로 전달.
-        DashboardSummaryDto dto = takeFromHistory(userId);
-        DashboardInfo newInfo = new DashboardInfo();
-        newInfo.setUserId(userId);
-        newInfo.setTotalInvestmentKrw(dto.getTotalInvestmentKrw());
-        newInfo.setTotalInvestmentUsd(dto.getTotalInvestmentUsd());
+    public DashboardSummaryDto getDashboardData(Long userId){
+        DashboardSummaryDto dto = new DashboardSummaryDto();
+        List<PortfolioItem> pList = pRepo.findByUserId(userId);
+        dto.setDetailList(pList);
 
-        List<DashboardDetail> dList = calculateDetail(newInfo);
-
-        newInfo.setTotalProfitLossKrw(BigDecimal.ZERO);
-        newInfo.setTotalProfitLossUsd(BigDecimal.ZERO);
-        dashboardInfoRepository.save(newInfo);
-
-        dto.setTotalDividendUsd(newInfo.getTotalDividendUsd());
-        dto.setTotalDividendKrw(newInfo.getTotalDividendKrw());
-        dto.setDetailList(dList);
         return dto;
     }
 
-    public DashboardSummaryDto attachDetailList(DashboardSummaryDto dto){
-        List<Optional<DashboardStockDto>> dtoList = new ArrayList<>();
-        return dto;
+    public void setDataToPortfolioItem(Long userId){
+        List<PortfolioItemDto> fList = calculatePortfolio(userId);
+        calProfitTo(userId, fList);
     }
 
-    private DashboardSummaryDto takeFromHistory(Long userId){
-        String type = "환전외화입금";
-        SummaryRecord r;
-        BigDecimal totalUsd;
-        BigDecimal totalKrw;
-        if (userId != null) {
-            r = dashboardInfoRepository.sumAmountByTradeTypeAndUserId(type, userId);
-        } else {
-            r = dashboardInfoRepository.sumAmountUsdByTradeType(type);
-        }
-        if (r == null) {
-            totalUsd = BigDecimal.ZERO;
-            totalKrw = BigDecimal.ZERO;
-        } else {
-            totalUsd = r.sumUsd() != null ? r.sumUsd() : BigDecimal.ZERO;
-            totalKrw = r.sumKrw() != null ? r.sumKrw() : BigDecimal.ZERO;
-        }
-        return DashboardSummaryDto.builder()
-                .totalInvestmentUsd(totalUsd)
-                .totalInvestmentKrw(totalKrw)
-                .build();
-    }
-
-    private List<DashboardDetail> calculateDetail(DashboardInfo info){
-        BigDecimal totalUsd = BigDecimal.ZERO;
-        BigDecimal totalKrw = BigDecimal.ZERO;
-        Long userId = info.getUserId();
-
+    private List<PortfolioItemDto> calculatePortfolio(Long userId){
         //trade_history로부터 데이터를 얻어와서 계산.
         List<String> types = List.of("외화증권배당금입금", "구매", "판매");
-        List<Object[]> rawList = thRepository.findByUser_IdTotalDiv(userId, types);
-        List<DashboardDetail> dList = new ArrayList<>(convertToDetailList(rawList));//convertToDetailList(rawList);
+        List<Object[]> rawList = thRepository.getGroupedTrList(userId, types);
+        List<PortfolioItemDto> pList = new ArrayList<>(convertToPList(rawList));
 
+        Map<String, BigDecimal> netBySymbol = calcNetBySymbolStream_renew(pList);
+        List<PortfolioItemDto> finalPList = new ArrayList<>();
 
-        Map<String, BigDecimal> netBySymbol = calcNetBySymbolStream(dList);
-
-        for (int i = 0; i < dList.size(); i++) {
-            DashboardDetail d = dList.get(i);
-            String tradeType = d.getTradeType();
-
-            if ("외화증권배당금입금".equals(tradeType)) {
-                BigDecimal divK = d.getTotalAmountKrw();
-                BigDecimal divU = d.getTotalAmountUsd();
-                d.setDividendKrw(divK);
-                d.setDividendUsd(divU);
-                d.setTotalAmountKrw(BigDecimal.ZERO);
-                d.setTotalAmountUsd(BigDecimal.ZERO);
-
-                String symbol = d.getSymbolName();
-                BigDecimal netQuantity = netBySymbol.getOrDefault(symbol, BigDecimal.ZERO);
-                d.setQuantity(netQuantity);
-            }
-
-            d.setUserId(userId);
-
-            // 한 번만 저장하고, 반환된 영속 엔티티로 리스트를 교체
-            DashboardDetail saved = dashboardDetailService.saveOrUpdate(d);
-            if (saved != null) {
-                dList.set(i, saved);
-            }
-
-            // 배당 합계는 저장된 객체의 값으로 집계
-            if ("외화증권배당금입금".equals(tradeType)) {
-                totalUsd = totalUsd.add(saved != null && saved.getDividendUsd() != null ? saved.getDividendUsd() : BigDecimal.ZERO);
-                totalKrw = totalKrw.add(saved != null && saved.getDividendKrw() != null ? saved.getDividendKrw() : BigDecimal.ZERO);
-            }
+        for(String key : netBySymbol.keySet()){
+            PortfolioItemDto p = new PortfolioItemDto(userId, key);
+            finalPList.add(p);
         }
 
-        info.setTotalDividendUsd(totalUsd);
-        info.setTotalDividendKrw(totalKrw);
+        for (PortfolioItemDto p : pList) {
+            PortfolioItemDto fp = finalPList.stream()
+                    .filter(item -> item.getCompanyName().equals(p.getSymbolName()))
+                    .findFirst()
+                    .orElse(new PortfolioItemDto(userId, p.getSymbolName()));
+            String tradeType = p.getTradeType();
+            String companyName = p.getCompanyName() == null ? p.getSymbolName() : p.getCompanyName();
+            if ("외화증권배당금입금".equals(tradeType)) {
+                fp.setDividendKrw(p.getTotalAmountKrw());
+                fp.setDividendUsd(p.getTotalAmountUsd());
+            } else if("구매".equals(tradeType)) {
+                fp.setAvgPriceUsd(p.getAvgPriceUsd());
+                fp.setAvgPriceKrw(p.getAvgPriceKrw());
+                fp.setTotalValueUsd(p.getTotalAmountUsd());
+                fp.setTotalValueKrw(p.getTotalAmountKrw());
+            } else if("판매".equals(tradeType)) {
+                BigDecimal oldUsd = fp.getTotalValueUsd() != null ? fp.getTotalValueUsd() : BigDecimal.ZERO;
+                BigDecimal oldKrw = fp.getTotalValueKrw() != null ? fp.getTotalValueKrw() : BigDecimal.ZERO;
+                if(oldUsd.compareTo(BigDecimal.ZERO) > 0 && oldKrw.compareTo(BigDecimal.ZERO) > 0) {
+                    // 판매한 금액을 차감 (현재 판매 거래의 금액)
+                    BigDecimal sellAmountKrw = p.getTotalAmountKrw() != null ? p.getTotalAmountKrw() : BigDecimal.ZERO;
+                    BigDecimal sellAmountUsd = p.getTotalAmountUsd() != null ? p.getTotalAmountUsd() : BigDecimal.ZERO;
 
-        return dList;
+                    fp.setTotalValueKrw(oldKrw.subtract(sellAmountKrw));
+                    fp.setTotalValueUsd(oldUsd.subtract(sellAmountUsd));
+
+                    // 음수가 되지 않도록 보정
+                    if(fp.getTotalValueKrw().compareTo(BigDecimal.ZERO) < 0) {
+                        fp.setTotalValueKrw(BigDecimal.ZERO);
+                    }
+                    if(fp.getTotalValueUsd().compareTo(BigDecimal.ZERO) < 0) {
+                        fp.setTotalValueUsd(BigDecimal.ZERO);
+                    }
+                }
+            }
+
+            BigDecimal netQuantity = netBySymbol.getOrDefault(companyName, BigDecimal.ZERO);
+            if (netQuantity.compareTo(BigDecimal.ZERO) <= 0) {
+                fp.setTotalValueKrw(BigDecimal.ZERO);
+                fp.setTotalValueUsd(BigDecimal.ZERO);
+            }
+
+            fp.setQuantity(netQuantity);
+            fp.setUserId(userId);
+        }
+
+        return finalPList;
     }
 
-    public void calDetailProfit(Long userId){
-        List<String> symbols = dashboardDetailRepository.findNeedCalProfitSymbols(userId, List.of("구매", "판매"));
-        List<Object[]> rawList = thRepository.getTrList(userId, symbols, List.of("구매", "판매"));
-        List<TradeHistory> tList = new ArrayList<>(rawList.stream().map(r -> {
-                        LocalDate trDate = r[0] != null ? LocalDate.parse(r[0].toString()) : null;
-                        String tradeType = r[1] != null ? r[1].toString() : null;
-                        String symbolName = r[2] != null ? r[2].toString() : null;
-                        BigDecimal quantity = toBigDecimal(r[3]);
-                        BigDecimal amountKrw = toBigDecimal(r[4]);
-                        BigDecimal amountUsd = toBigDecimal(r[5]);
-                        BigDecimal priceKrw = toBigDecimal(r[6]);
-                        BigDecimal priceUsd = toBigDecimal(r[7]);
-                        BigDecimal feeKrw = toBigDecimal(r[8]);
-                        BigDecimal feeUsd = toBigDecimal(r[9]);
-                        BigDecimal taxKrw = toBigDecimal(r[10]);
-                        BigDecimal taxUsd = toBigDecimal(r[11]);
+    public void calProfitTo(Long userId, List<PortfolioItemDto> pList){
+        List<Object[]> rawList = thRepository.getProfitList(userId, List.of("구매", "판매"));
+        List<PortfolioItemDto> tList = new ArrayList<>(rawList.stream().map(r -> {
+            LocalDate trDate = r[0] != null ? LocalDate.parse(r[0].toString()) : null;
+            String tradeType = r[1] != null ? r[1].toString() : null;
+            String symbolName = r[2] != null ? r[2].toString() : null;
+            BigDecimal quantity = toBigDecimal(r[3]);
+            BigDecimal amountKrw = toBigDecimal(r[4]);
+            BigDecimal amountUsd = toBigDecimal(r[5]);
+            BigDecimal priceKrw = toBigDecimal(r[6]);
+            BigDecimal priceUsd = toBigDecimal(r[7]);
+            BigDecimal feeKrw = toBigDecimal(r[8]);
+            BigDecimal feeUsd = toBigDecimal(r[9]);
+            BigDecimal taxKrw = toBigDecimal(r[10]);
+            BigDecimal taxUsd = toBigDecimal(r[11]);
 
-                        TradeHistory t = new TradeHistory();
-                        t.setTradeDate(trDate);
-                        t.setTradeType(tradeType);
-                        t.setSymbolName(symbolName);
-                        t.setQuantity(quantity);
-                        t.setAmountKrw(amountKrw);
-                        t.setAmountUsd(amountUsd);
-                        t.setPriceKrw(priceKrw);
-                        t.setPriceUsd(priceUsd);
-                        t.setFeeKrw(feeKrw);
-                        t.setFeeUsd(feeUsd);
-                        t.setTaxKrw(taxKrw);
-                        t.setTaxUsd(taxUsd);
+            PortfolioItemDto t = new PortfolioItemDto();
+            t.setTradeDate(trDate);
+            t.setTradeType(tradeType);
+            t.setSymbolName(symbolName);
+            t.setQuantity(quantity);
+            t.setAmountKrw(amountKrw);
+            t.setAmountUsd(amountUsd);
+            t.setPriceKrw(priceKrw);
+            t.setPriceUsd(priceUsd);
+            t.setFeeKrw(feeKrw);
+            t.setFeeUsd(feeUsd);
+            t.setTaxKrw(taxKrw);
+            t.setTaxUsd(taxUsd);
 
-                        return t;
-                    }).toList());
-        for(String symbol : symbols){
-            List<TradeHistory> filteredList = tList.stream()
-                    .filter(t -> symbol.equals(t.getSymbolName()))
+            return t;
+        }).toList());
+        List<String> symbols = tList.stream()
+                .map(PortfolioItemDto::getSymbolName)
+                .distinct()
+                .toList();
+        PortfolioItem e = new PortfolioItem();
+        for(String companyName : symbols){
+            List<PortfolioItemDto> filteredList = tList.stream()
+                    .filter(t -> companyName.equals(t.getSymbolName()))
                     .toList();
-            ProfitResult p = computeForList_simple(symbol, filteredList);
-            DashboardDetail toSave = new DashboardDetail();
-            toSave.setUserId(userId);
-            toSave.setSymbolName(symbol);
-            toSave.setTradeType("매매손익");
-            toSave.setProfitLossKrw(p.getProfitKrw());
-            toSave.setProfitLossUsd(p.getProfitUsd());
-            dashboardDetailService.saveOrUpdate(toSave);
+            ProfitResult p = computeForList_simple_renew(companyName, filteredList);
+
+            PortfolioItemDto fdto = pList.stream()
+                    .filter(item -> item.getCompanyName().equals(companyName))
+                    .findFirst()
+                    .orElse(null);
+            if(fdto != null){
+                fdto.setProfitKrw(p.getProfitKrw());
+                fdto.setProfitUsd(p.getProfitUsd());
+
+                // 기존 엔티티 조회 후 업데이트 (PK 조건으로 findBy 메서드 필요)
+                Optional<PortfolioItem> existing = pRepo.findByUserIdAndCompanyName(userId, companyName);
+                if(existing.isPresent()) {
+                    // 기존 엔티티 업데이트
+                    PortfolioItem existingEntity = existing.get();
+                    existingEntity.setProfitKrw(p.getProfitKrw());
+                    existingEntity.setProfitUsd(p.getProfitUsd());
+                    existingEntity.setAvgPriceKrw(fdto.getAvgPriceKrw());
+                    existingEntity.setAvgPriceUsd(fdto.getAvgPriceUsd());
+                    existingEntity.setQuantity(fdto.getQuantity());
+                    existingEntity.setTotalValueKrw(fdto.getTotalValueKrw());
+                    existingEntity.setTotalValueUsd(fdto.getTotalValueUsd());
+                    existingEntity.setDividendKrw(fdto.getDividendKrw());
+                    existingEntity.setDividendUsd(fdto.getDividendUsd());
+                    // 다른 필드들도 필요시 업데이트
+                    pRepo.save(existingEntity); // UPDATE 실행
+                } else {
+                    // 새로 생성
+                    pRepo.save(e.fromDto(fdto));
+                }
+            }
+
         }
     }
-
-
-
-    private ProfitResult computeForList_simple(String symbolName, List<TradeHistory> tList) {
+    /**
+     * 단순 매매손익 계산
+     * @param symbolName
+     * @param tList
+     * @return ProfitResult
+     */
+    private ProfitResult computeForList_simple_renew(String symbolName, List<PortfolioItemDto> tList) {
         ProfitResult p = new ProfitResult(symbolName);
 
         BigDecimal totalBuyAmountKrw = BigDecimal.ZERO;  // 누적매입금
@@ -216,7 +202,7 @@ public class DashboardService {
         BigDecimal totalBuyQty = BigDecimal.ZERO;        // 총구매수량
         BigDecimal currentQty = BigDecimal.ZERO;         // 현재보유수량
 
-        for (TradeHistory t : tList) {
+        for (PortfolioItemDto t : tList) {
             BigDecimal qty = t.getQuantity() != null ? t.getQuantity() : BigDecimal.ZERO;
 
             if ("구매".equals(t.getTradeType())) {
@@ -301,11 +287,10 @@ public class DashboardService {
         return p;
     }
 
-    // 3) 심볼별로 순수량을 계산하는 Stream 방식 (동일 결과)
-    public Map<String, BigDecimal> calcNetBySymbolStream(List<DashboardDetail> dList) {
-        return dList.stream()
+    public Map<String, BigDecimal> calcNetBySymbolStream_renew(List<PortfolioItemDto> dList) {
+        Map<String, BigDecimal> raw = dList.stream()
                 .collect(Collectors.groupingBy(
-                        DashboardDetail::getSymbolName,
+                        PortfolioItemDto::getSymbolName,
                         Collectors.reducing(
                                 BigDecimal.ZERO,
                                 d -> {
@@ -317,9 +302,14 @@ public class DashboardService {
                                 BigDecimal::add
                         )
                 ));
+        return raw.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> e.getValue().compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : e.getValue()
+                ));
     }
 
-    public List<DashboardDetail> convertToDetailList(List<Object[]> raws) {
+    public List<PortfolioItemDto> convertToPList(List<Object[]> raws) {
 
         return raws.stream().map(r -> {
             String tradeType = r[0] != null ? r[0].toString() : null;
@@ -331,7 +321,7 @@ public class DashboardService {
             BigDecimal avgKrw = toBigDecimal(r[5]);
             BigDecimal avgUsd = toBigDecimal(r[6]);
 
-            DashboardDetail d = new DashboardDetail();
+            PortfolioItemDto d = new PortfolioItemDto();
             d.setTradeType(tradeType);
             d.setSymbolName(symbolName);
             d.setTotalAmountKrw(totalKrw);
