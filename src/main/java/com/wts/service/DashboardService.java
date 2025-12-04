@@ -45,14 +45,20 @@ public class DashboardService {
         return dto;
     }
 
-    public void setDataToPortfolioItem(Long userId){
-        List<PortfolioItemDto> fList = calculatePortfolio(userId);
-        calProfitTo(userId, fList);
+    public ProcessResult setDataToPortfolioItem(Long userId){
+        try {
+            List<PortfolioItemDto> fList = calculatePortfolio(userId);
+            calProfitTo(userId, fList);
+            return new ProcessResult(true, "포트폴리오 데이터 업데이트 완료");
+        } catch (Exception e) {
+            return new ProcessResult(false, "포트폴리오 엡데이트 실패 :" + e.getMessage(),"PORTFOLIO_UPDATE_ERROR" );
+        }
+
     }
 
     private List<PortfolioItemDto> calculatePortfolio(Long userId){
         //trade_history로부터 데이터를 얻어와서 계산.
-        List<String> types = List.of("외화증권배당금입금", "구매", "판매");
+        List<String> types = List.of("외화증권배당금입금", "구매", "판매", "주식병합출고", "주식병합입고");
         List<Object[]> rawList = thRepository.getGroupedTrList(userId, types);
         List<PortfolioItemDto> pList = new ArrayList<>(convertToPList(rawList));
 
@@ -77,33 +83,46 @@ public class DashboardService {
             } else if("구매".equals(tradeType)) {
                 fp.setAvgPriceUsd(p.getAvgPriceUsd());
                 fp.setAvgPriceKrw(p.getAvgPriceKrw());
-                fp.setTotalValueUsd(p.getTotalAmountUsd());
-                fp.setTotalValueKrw(p.getTotalAmountKrw());
+                fp.setTotalInvestmentUsd(p.getTotalAmountUsd());
+                fp.setTotalInvestmentKrw(p.getTotalAmountKrw());
             } else if("판매".equals(tradeType)) {
-                BigDecimal oldUsd = fp.getTotalValueUsd() != null ? fp.getTotalValueUsd() : BigDecimal.ZERO;
-                BigDecimal oldKrw = fp.getTotalValueKrw() != null ? fp.getTotalValueKrw() : BigDecimal.ZERO;
+                BigDecimal oldUsd = fp.getTotalInvestmentUsd() != null ? fp.getTotalInvestmentUsd() : BigDecimal.ZERO;
+                BigDecimal oldKrw = fp.getTotalInvestmentKrw() != null ? fp.getTotalInvestmentKrw() : BigDecimal.ZERO;
+                BigDecimal oldQty = fp.getQuantity() != null ? fp.getQuantity() : BigDecimal.ZERO;
+
                 if(oldUsd.compareTo(BigDecimal.ZERO) > 0 && oldKrw.compareTo(BigDecimal.ZERO) > 0) {
                     // 판매한 금액을 차감 (현재 판매 거래의 금액)
                     BigDecimal sellAmountKrw = p.getTotalAmountKrw() != null ? p.getTotalAmountKrw() : BigDecimal.ZERO;
                     BigDecimal sellAmountUsd = p.getTotalAmountUsd() != null ? p.getTotalAmountUsd() : BigDecimal.ZERO;
+                    BigDecimal sellQty = p.getQuantity() != null ? p.getQuantity() : BigDecimal.ZERO;
 
-                    fp.setTotalValueKrw(oldKrw.subtract(sellAmountKrw));
-                    fp.setTotalValueUsd(oldUsd.subtract(sellAmountUsd));
+                    fp.setTotalInvestmentUsd(oldUsd.subtract(sellAmountUsd));
+                    fp.setTotalInvestmentKrw(oldKrw.subtract(sellAmountKrw));
+                    fp.setQuantity(oldQty.subtract(sellQty));
 
                     // 음수가 되지 않도록 보정
-                    if(fp.getTotalValueKrw().compareTo(BigDecimal.ZERO) < 0) {
-                        fp.setTotalValueKrw(BigDecimal.ZERO);
+                    if(fp.getTotalInvestmentKrw().compareTo(BigDecimal.ZERO) < 0) {
+                        fp.setTotalInvestmentKrw(BigDecimal.ZERO);
                     }
-                    if(fp.getTotalValueUsd().compareTo(BigDecimal.ZERO) < 0) {
-                        fp.setTotalValueUsd(BigDecimal.ZERO);
+                    if(fp.getTotalInvestmentUsd().compareTo(BigDecimal.ZERO) < 0) {
+                        fp.setTotalInvestmentUsd(BigDecimal.ZERO);
                     }
                 }
             }
+//            else if("주식병합출고".equals(tradeType)) {
+//                BigDecimal oldQty = fp.getQuantity() != null ? fp.getQuantity() : BigDecimal.ZERO;
+//                BigDecimal mergeOutQty = p.getQuantity() != null ? p.getQuantity() : BigDecimal.ZERO;
+//                fp.setQuantity(oldQty.subtract(mergeOutQty));
+//            } else if("주식병합입고".equals(tradeType)) {
+//                BigDecimal oldQty = fp.getQuantity() != null ? fp.getQuantity() : BigDecimal.ZERO;
+//                BigDecimal mergeInQty = p.getQuantity() != null ? p.getQuantity() : BigDecimal.ZERO;
+//                fp.setQuantity(oldQty.add(mergeInQty));
+//            }
 
             BigDecimal netQuantity = netBySymbol.getOrDefault(companyName, BigDecimal.ZERO);
             if (netQuantity.compareTo(BigDecimal.ZERO) <= 0) {
-                fp.setTotalValueKrw(BigDecimal.ZERO);
-                fp.setTotalValueUsd(BigDecimal.ZERO);
+                fp.setTotalInvestmentKrw(BigDecimal.ZERO);
+                fp.setTotalInvestmentUsd(BigDecimal.ZERO);
             }
 
             fp.setQuantity(netQuantity);
@@ -174,8 +193,8 @@ public class DashboardService {
                     existingEntity.setAvgPriceKrw(fdto.getAvgPriceKrw());
                     existingEntity.setAvgPriceUsd(fdto.getAvgPriceUsd());
                     existingEntity.setQuantity(fdto.getQuantity());
-                    existingEntity.setTotalValueKrw(fdto.getTotalValueKrw());
-                    existingEntity.setTotalValueUsd(fdto.getTotalValueUsd());
+                    existingEntity.setTotalInvestmentKrw(fdto.getTotalInvestmentKrw());
+                    existingEntity.setTotalInvestmentUsd(fdto.getTotalInvestmentUsd());
                     existingEntity.setDividendKrw(fdto.getDividendKrw());
                     existingEntity.setDividendUsd(fdto.getDividendUsd());
                     // 다른 필드들도 필요시 업데이트
@@ -211,7 +230,7 @@ public class DashboardService {
                 // 구매 단가 계산 (수수료/세금 포함)
                 BigDecimal buyPriceKrw = t.getPriceKrw() != null && t.getPriceKrw().compareTo(BigDecimal.ZERO) > 0
                         ? t.getPriceKrw()
-                        : (t.getAmountKrw() != null ? t.getAmountKrw().divide(qty, 8, java.math.RoundingMode.HALF_UP) : BigDecimal.ZERO);
+                        : (t.getAmountKrw() != null ? t.getAmountKrw().divide(qty, 0, java.math.RoundingMode.HALF_UP) : BigDecimal.ZERO);
 
                 BigDecimal buyPriceUsd = t.getPriceUsd() != null && t.getPriceUsd().compareTo(BigDecimal.ZERO) > 0
                         ? t.getPriceUsd()
@@ -219,9 +238,9 @@ public class DashboardService {
 
                 // 수수료/세금을 단가에 반영
                 if (t.getFeeKrw() != null && qty.compareTo(BigDecimal.ZERO) > 0)
-                    buyPriceKrw = buyPriceKrw.add(t.getFeeKrw().divide(qty, 8, java.math.RoundingMode.HALF_UP));
+                    buyPriceKrw = buyPriceKrw.add(t.getFeeKrw().divide(qty, 0, java.math.RoundingMode.HALF_UP));
                 if (t.getTaxKrw() != null && qty.compareTo(BigDecimal.ZERO) > 0)
-                    buyPriceKrw = buyPriceKrw.add(t.getTaxKrw().divide(qty, 8, java.math.RoundingMode.HALF_UP));
+                    buyPriceKrw = buyPriceKrw.add(t.getTaxKrw().divide(qty, 0, java.math.RoundingMode.HALF_UP));
                 if (t.getFeeUsd() != null && qty.compareTo(BigDecimal.ZERO) > 0)
                     buyPriceUsd = buyPriceUsd.add(t.getFeeUsd().divide(qty, 8, java.math.RoundingMode.HALF_UP));
                 if (t.getTaxUsd() != null && qty.compareTo(BigDecimal.ZERO) > 0)
@@ -237,18 +256,19 @@ public class DashboardService {
                 if (qty.compareTo(BigDecimal.ZERO) <= 0) continue;
 
                 // 판매 단가 계산 (수수료/세금 차감)
+                // 판매단가 계산 (KRW는 정수로)
                 BigDecimal sellPriceKrw = t.getPriceKrw() != null && t.getPriceKrw().compareTo(BigDecimal.ZERO) > 0
                         ? t.getPriceKrw()
-                        : (t.getAmountKrw() != null ? t.getAmountKrw().divide(qty, 8, java.math.RoundingMode.HALF_UP) : BigDecimal.ZERO);
+                        : (t.getAmountKrw() != null ? t.getAmountKrw().divide(qty, 0, java.math.RoundingMode.HALF_UP) : BigDecimal.ZERO);
 
                 BigDecimal sellPriceUsd = t.getPriceUsd() != null && t.getPriceUsd().compareTo(BigDecimal.ZERO) > 0
                         ? t.getPriceUsd()
                         : (t.getAmountUsd() != null ? t.getAmountUsd().divide(qty, 8, java.math.RoundingMode.HALF_UP) : BigDecimal.ZERO);
 
                 if (t.getFeeKrw() != null && qty.compareTo(BigDecimal.ZERO) > 0)
-                    sellPriceKrw = sellPriceKrw.subtract(t.getFeeKrw().divide(qty, 8, java.math.RoundingMode.HALF_UP));
+                    sellPriceKrw = sellPriceKrw.subtract(t.getFeeKrw().divide(qty, 0, java.math.RoundingMode.HALF_UP));
                 if (t.getTaxKrw() != null && qty.compareTo(BigDecimal.ZERO) > 0)
-                    sellPriceKrw = sellPriceKrw.subtract(t.getTaxKrw().divide(qty, 8, java.math.RoundingMode.HALF_UP));
+                    sellPriceKrw = sellPriceKrw.subtract(t.getTaxKrw().divide(qty, 0, java.math.RoundingMode.HALF_UP));
                 if (t.getFeeUsd() != null && qty.compareTo(BigDecimal.ZERO) > 0)
                     sellPriceUsd = sellPriceUsd.subtract(t.getFeeUsd().divide(qty, 8, java.math.RoundingMode.HALF_UP));
                 if (t.getTaxUsd() != null && qty.compareTo(BigDecimal.ZERO) > 0)
@@ -258,11 +278,12 @@ public class DashboardService {
                 BigDecimal divisor = currentQty.compareTo(BigDecimal.ZERO) > 0 ? currentQty : totalBuyQty;
                 if (divisor.compareTo(BigDecimal.ZERO) <= 0) continue;
 
-                BigDecimal avgBuyKrw = totalBuyAmountKrw.divide(divisor, 8, java.math.RoundingMode.HALF_UP);
+                BigDecimal avgBuyKrw = totalBuyAmountKrw.divide(divisor, 0, java.math.RoundingMode.HALF_UP);
                 BigDecimal avgBuyUsd = totalBuyAmountUsd.divide(divisor, 8, java.math.RoundingMode.HALF_UP);
 
                 // 실현손익 = (판매단가 - 평균매수단가) × 판매수량
                 BigDecimal krwDiff = sellPriceKrw.subtract(avgBuyKrw).multiply(qty);
+                krwDiff = krwDiff.setScale(0, java.math.RoundingMode.HALF_UP);
                 BigDecimal usdDiff = sellPriceUsd.subtract(avgBuyUsd).multiply(qty);
                 p.addProfit(krwDiff, usdDiff, qty);
 
@@ -277,7 +298,7 @@ public class DashboardService {
                     currentQty = BigDecimal.ZERO;
                 } else {
                     // 부분매도시 매입금도 비례적으로 차감
-                    BigDecimal ratio = qty.divide(divisor, 8, java.math.RoundingMode.HALF_UP);
+//                    BigDecimal ratio = qty.divide(divisor, 8, java.math.RoundingMode.HALF_UP);
                     totalBuyAmountKrw = totalBuyAmountKrw.subtract(avgBuyKrw.multiply(qty));
                     totalBuyAmountUsd = totalBuyAmountUsd.subtract(avgBuyUsd.multiply(qty));
                 }
@@ -297,6 +318,8 @@ public class DashboardService {
                                     BigDecimal q = d.getQuantity() != null ? d.getQuantity() : BigDecimal.ZERO;
                                     return "구매".equals(d.getTradeType()) ? q
                                             : "판매".equals(d.getTradeType()) ? q.negate()
+                                            : "주식병합출고".equals(d.getTradeType()) ? q.negate()
+                                            : "주식병합입고".equals(d.getTradeType()) ? q
                                             : BigDecimal.ZERO;
                                 },
                                 BigDecimal::add
