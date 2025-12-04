@@ -49,6 +49,11 @@ public class PortfolioItem {
     @Column(name = "total_value_krw", precision = 19, scale = 4)
     private BigDecimal totalValueKrw;
 
+    @Column(name = "total_investment_krw", precision = 19, scale = 4)
+    private BigDecimal totalInvestmentKrw;
+    @Column(name = "total_investment_usd", precision = 19, scale = 4)
+    private BigDecimal totalInvestmentUsd;
+
     @Column(name = "profit_usd", precision = 19, scale = 4)
     private BigDecimal profitUsd;
 
