@@ -34,49 +34,49 @@ public class TradeHistory {
     @Column(name = "symbol_name")
     private String symbolName;
 
-    @Column(name = "fx_rate")
+    @Column(name = "fx_rate", precision = 38, scale = 6)
     private BigDecimal fxRate;
 
-    @Column(name = "quantity")
+    @Column(name = "quantity", precision = 38, scale = 6)
     private BigDecimal quantity;
 
-    @Column(name = "amount_krw")
+    @Column(name = "amount_krw", precision = 38, scale = 6)
     private BigDecimal amountKrw;
 
-    @Column(name = "amount_usd")
+    @Column(name = "amount_usd", precision = 38, scale = 6)
     private BigDecimal amountUsd;
 
-    @Column(name = "price_krw")
+    @Column(name = "price_krw", precision = 38, scale = 6)
     private BigDecimal priceKrw;
 
-    @Column(name = "price_usd")
+    @Column(name = "price_usd", precision = 38, scale = 6)
     private BigDecimal priceUsd;
 
-    @Column(name = "fee_krw")
+    @Column(name = "fee_krw", precision = 38, scale = 6)
     private BigDecimal feeKrw;
 
-    @Column(name = "fee_usd")
+    @Column(name = "fee_usd", precision = 38, scale = 6)
     private BigDecimal feeUsd;
 
-    @Column(name = "tax_krw")
+    @Column(name = "tax_krw", precision = 38, scale = 6)
     private BigDecimal taxKrw;
 
-    @Column(name = "tax_usd")
+    @Column(name = "tax_usd", precision = 38, scale = 6)
     private BigDecimal taxUsd;
 
-    @Column(name = "repay_total_krw")
+    @Column(name = "repay_total_krw", precision = 38, scale = 6)
     private BigDecimal repayTotalKrw;
 
-    @Column(name = "repay_total_usd")
+    @Column(name = "repay_total_usd", precision = 38, scale = 6)
     private BigDecimal repayTotalUsd;
 
-    @Column(name = "balance_qty")
+    @Column(name = "balance_qty", precision = 38, scale = 6)
     private BigDecimal balanceQty;
 
-    @Column(name = "balance_krw")
+    @Column(name = "balance_krw", precision = 38, scale = 6)
     private BigDecimal balanceKrw;
 
-    @Column(name = "balance_usd")
+    @Column(name = "balance_usd", precision = 38, scale = 6)
     private BigDecimal balanceUsd;
 
     @Column(name = "source_row")
