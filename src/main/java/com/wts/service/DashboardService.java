@@ -1,14 +1,8 @@
 package com.wts.service;
 
-import com.wts.entity.DashboardDetail;
-import com.wts.entity.DashboardInfo;
-import com.wts.entity.PortfolioItem;
-import com.wts.entity.TradeHistory;
+import com.wts.entity.*;
 import com.wts.model.*;
-import com.wts.repository.DashboardDetailRepository;
-import com.wts.repository.DashboardInfoRepository;
-import com.wts.repository.PortfolioItemRepository;
-import com.wts.repository.TradeHistoryRepository;
+import com.wts.repository.*;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,12 +23,14 @@ public class DashboardService {
 
     private final TradeHistoryRepository thRepository;
     private final PortfolioItemRepository pRepo;
-    @Autowired
-    private DashboardDetailService dashboardDetailService;
+    private final SymbolTickerRepository sRepo;
+    private final PythonServerService pService;
 
-    public DashboardService(TradeHistoryRepository thRepository, PortfolioItemRepository portfolioItemRepository) {
+    public DashboardService(TradeHistoryRepository thRepository, PortfolioItemRepository portfolioItemRepository, SymbolTickerRepository sRepo, PythonServerService pService) {
         this.thRepository = thRepository;
         this.pRepo = portfolioItemRepository;
+        this.sRepo = sRepo;
+        this.pService = pService;
     }
 
     public DashboardSummaryDto getDashboardData(Long userId){
@@ -75,6 +71,23 @@ public class DashboardService {
                     .filter(item -> item.getCompanyName().equals(p.getSymbolName()))
                     .findFirst()
                     .orElse(new PortfolioItemDto(userId, p.getSymbolName()));
+            Optional<SymbolTicker> found = sRepo.findByIsin(p.getIsin());
+            found.ifPresent(s -> {
+                String symbol = s.getTicker();
+                if(symbol != null && !symbol.isEmpty())
+                    fp.setSymbol(s.getTicker());
+                else {
+                    //파이썬서버에 외부로부터 ticker 호출.
+                    ProcessResult r = pService.getTicker(p.getIsin());
+                    String ticker = r.isSuccess() ? r.getMessage() : "";
+                    if(ticker != null && !ticker.isEmpty()) {
+                        fp.setSymbol(ticker);
+                        s.setTicker(ticker);
+                        sRepo.save(s);
+                    }
+                }
+            });
+
             String tradeType = p.getTradeType();
             String companyName = p.getCompanyName() == null ? p.getSymbolName() : p.getCompanyName();
             if ("외화증권배당금입금".equals(tradeType)) {
@@ -109,15 +122,6 @@ public class DashboardService {
                     }
                 }
             }
-//            else if("주식병합출고".equals(tradeType)) {
-//                BigDecimal oldQty = fp.getQuantity() != null ? fp.getQuantity() : BigDecimal.ZERO;
-//                BigDecimal mergeOutQty = p.getQuantity() != null ? p.getQuantity() : BigDecimal.ZERO;
-//                fp.setQuantity(oldQty.subtract(mergeOutQty));
-//            } else if("주식병합입고".equals(tradeType)) {
-//                BigDecimal oldQty = fp.getQuantity() != null ? fp.getQuantity() : BigDecimal.ZERO;
-//                BigDecimal mergeInQty = p.getQuantity() != null ? p.getQuantity() : BigDecimal.ZERO;
-//                fp.setQuantity(oldQty.add(mergeInQty));
-//            }
 
             BigDecimal netQuantity = netBySymbol.getOrDefault(companyName, BigDecimal.ZERO);
             if (netQuantity.compareTo(BigDecimal.ZERO) <= 0) {
@@ -147,6 +151,7 @@ public class DashboardService {
             BigDecimal feeUsd = toBigDecimal(r[9]);
             BigDecimal taxKrw = toBigDecimal(r[10]);
             BigDecimal taxUsd = toBigDecimal(r[11]);
+            String isin = r[12] != null ? r[12].toString() : null;
 
             PortfolioItemDto t = new PortfolioItemDto();
             t.setTradeDate(trDate);
@@ -161,6 +166,7 @@ public class DashboardService {
             t.setFeeUsd(feeUsd);
             t.setTaxKrw(taxKrw);
             t.setTaxUsd(taxUsd);
+            t.setIsin(isin);
 
             return t;
         }).toList());
@@ -180,6 +186,7 @@ public class DashboardService {
                     .findFirst()
                     .orElse(null);
             if(fdto != null){
+                //
                 fdto.setProfitKrw(p.getProfitKrw());
                 fdto.setProfitUsd(p.getProfitUsd());
 
@@ -197,6 +204,7 @@ public class DashboardService {
                     existingEntity.setTotalInvestmentUsd(fdto.getTotalInvestmentUsd());
                     existingEntity.setDividendKrw(fdto.getDividendKrw());
                     existingEntity.setDividendUsd(fdto.getDividendUsd());
+                    existingEntity.setSymbol(fdto.getSymbol());
                     // 다른 필드들도 필요시 업데이트
                     pRepo.save(existingEntity); // UPDATE 실행
                 } else {
@@ -343,6 +351,7 @@ public class DashboardService {
             BigDecimal quantity = toBigDecimal(r[4]);
             BigDecimal avgKrw = toBigDecimal(r[5]);
             BigDecimal avgUsd = toBigDecimal(r[6]);
+            String isin = r[7] != null ? r[7].toString() : null;
 
             PortfolioItemDto d = new PortfolioItemDto();
             d.setTradeType(tradeType);
@@ -352,6 +361,7 @@ public class DashboardService {
             d.setQuantity(quantity);
             d.setAvgPriceKrw(avgKrw);
             d.setAvgPriceUsd(avgUsd);
+            d.setIsin(isin);
             return d;
         }).toList();
     }

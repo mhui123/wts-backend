@@ -48,6 +48,7 @@ public class PortfolioItemDto {
     private BigDecimal profitUsd = BigDecimal.ZERO;
     private BigDecimal totalInvestmentKrw;
     private BigDecimal totalInvestmentUsd;
+    private String isin;
 
     public PortfolioItemDto(Long userId, String companyName) {
         this.userId = userId;
