@@ -1,0 +1,95 @@
+package com.wts.api;
+
+import com.wts.model.*;
+import com.wts.service.DashboardService;
+import com.wts.service.PythonServerService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+@RestController
+@RequestMapping("/api/python")
+@RequiredArgsConstructor
+@Slf4j
+public class PythonController {
+
+    private final PythonServerService pythonServerService;
+    private final DashboardService dService;
+
+    // ...existing executeTask method...
+    // ...existing checkPythonServerHealth method...
+
+    /**
+     * Python 서버에서 티커 정보 조회
+     */
+    @GetMapping("/ticker")
+    public ResponseEntity<ProcessResult> getTicker(@RequestParam(name = "isin", required = false) String isin) {
+        log.info("티커 정보 조회 요청: isin={}", isin);
+
+        try {
+            ProcessResult response = pythonServerService.getTicker(isin);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("티커 정보 조회 실패: ", e);
+            ProcessResult errorResponse = ProcessResult.builder()
+                    .success(false)
+                    .message("티커 정보 조회 실패: " + e.getMessage())
+                    .build();
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
+
+
+    /**
+     * Python 서버에서 티커 정보 조회
+     */
+    @GetMapping("/stock/prices")
+    public ResponseEntity<StockPriceResponseDto> getStockPrice(@RequestParam(required = false) String symbols) {
+        log.info("주가정보 요청: symbol={}", symbols);
+
+        try {
+            StockPriceResponseDto response = pythonServerService.getStockPrice(symbols);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("주가정보 조회 실패: ", e);
+            return ResponseEntity.internalServerError().body(new StockPriceResponseDto());
+        }
+    }
+    /**
+     * 거래 내역을 Python 서버로 업로드
+     */
+    @PostMapping(value = "/uploadTradeHistory", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ProcessResult> uploadTradeHistory(
+            @RequestPart("file") MultipartFile file,
+            @RequestParam("userId") String userId) {
+
+        log.info("거래내역 업로드 요청: userId={}, filename={}", userId, file.getOriginalFilename());
+
+        try {
+            // DTO 생성
+            TradeHistoryUploadDto uploadDto = TradeHistoryUploadDto.builder()
+                    .userId(userId)
+                    .file(file)
+                    .build();
+
+            // Python 서버에서 JSON 데이터 받아오기
+            ProcessResult response = pythonServerService.uploadTradeHistory(uploadDto);
+            if(response.isSuccess()){
+                dService.setDataToPortfolioItem(Long.parseLong(userId)); //portfolioItem 최신화
+            }
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("거래내역 업로드 실패: ", e);
+            ProcessResult errorResponse = ProcessResult.builder()
+                    .success(false)
+                    .message("거래내역 업로드 실패: " + e.getMessage())
+                    .build();
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
+
+}
