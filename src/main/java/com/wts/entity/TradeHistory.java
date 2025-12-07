@@ -88,6 +88,9 @@ public class TradeHistory {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "isin", length = 255)
+    private String isin;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

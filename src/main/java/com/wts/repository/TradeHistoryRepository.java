@@ -57,18 +57,18 @@ public interface TradeHistoryRepository extends JpaRepository<TradeHistory, Long
     @Query(value=
             "select th.trade_type, th.symbol_name, " +
                     " sum(th.amount_krw ) as total_amount_krw, sum(th.amount_usd) as total_amount_usd, sum(th.quantity) as quantity " +
-                    " , avg(th.price_krw) as avg_price_krw, avg(th.price_usd) as avg_price_usd " +
+                    " , avg(th.price_krw) as avg_price_krw, avg(th.price_usd) as avg_price_usd, th.isin " +
                     " from stockdb.trade_history th " +
                     " where 1=1" +
                     " and th.user_id = :userId " +
                     " and th.trade_type In (:types) " +
-                    " group by th.symbol_name, th.trade_type " +
+                    " group by th.symbol_name, th.trade_type, th.isin " +
                     " order by th.symbol_name ", nativeQuery = true)
     List<Object[]> getGroupedTrList(@Param("userId") Long userId, @Param("types") List<String> types);
 
     @Query(value=
             "select th.trade_date, th.trade_type, th.symbol_name, th.quantity, th.amount_krw, th.amount_usd, th.price_krw , th.price_usd, " +
-                    " th.fee_krw , th.fee_usd , th.tax_krw , th.tax_usd " +
+                    " th.fee_krw , th.fee_usd , th.tax_krw , th.tax_usd, th.isin " +
                     " from trade_history th " +
                     " where th.user_id = :userId " +
                     " and th.trade_type in ( :types ) " +
