@@ -72,11 +72,13 @@ public class DashboardService {
                     .findFirst()
                     .orElse(new PortfolioItemDto(userId, p.getSymbolName()));
             Optional<SymbolTicker> found = sRepo.findByIsin(p.getIsin());
-            found.ifPresent(s -> {
+
+            if (found.isPresent()) {
+                SymbolTicker s = found.get();
                 String symbol = s.getTicker();
-                if(symbol != null && !symbol.isEmpty())
+                if(symbol != null && !symbol.isEmpty()) {
                     fp.setSymbol(s.getTicker());
-                else {
+                } else {
                     //파이썬서버에 외부로부터 ticker 호출.
                     ProcessResult r = pService.getTicker(p.getIsin());
                     String ticker = r.isSuccess() ? r.getMessage() : "";
@@ -86,7 +88,20 @@ public class DashboardService {
                         sRepo.save(s);
                     }
                 }
-            });
+            } else {
+                // found가 empty인 경우 (기존에 ISIN으로 조회된 데이터가 없는 경우)
+                ProcessResult r = pService.getTicker(p.getIsin());
+                String ticker = r.isSuccess() ? r.getMessage() : "";
+                if(ticker != null && !ticker.isEmpty()) {
+                    fp.setSymbol(ticker);
+                    // 새로운 SymbolTicker 엔티티 생성 및 저장
+                    SymbolTicker newSymbolTicker = new SymbolTicker();
+                    newSymbolTicker.setIsin(p.getIsin());
+                    newSymbolTicker.setTicker(ticker);
+                    newSymbolTicker.setSymbolName(p.getSymbolName());
+                    sRepo.save(newSymbolTicker);
+                }
+            }
 
             String tradeType = p.getTradeType();
             String companyName = p.getCompanyName() == null ? p.getSymbolName() : p.getCompanyName();
@@ -94,13 +109,19 @@ public class DashboardService {
                 fp.setDividendKrw(p.getTotalAmountKrw());
                 fp.setDividendUsd(p.getTotalAmountUsd());
             } else if("구매".equals(tradeType)) {
-                fp.setAvgPriceUsd(p.getAvgPriceUsd());
-                fp.setAvgPriceKrw(p.getAvgPriceKrw());
-                fp.setTotalInvestmentUsd(p.getTotalAmountUsd());
-                fp.setTotalInvestmentKrw(p.getTotalAmountKrw());
+                fp.setAvgBuyPriceKrw(p.getAvgPriceKrw());
+                fp.setAvgBuyPriceUsd(p.getAvgPriceUsd());
+                fp.setTotalBuyKrw(p.getTotalAmountKrw());
+                fp.setTotalBuyUsd(p.getTotalAmountUsd());
+                fp.setBuyQty(p.getQuantity());
+                fp.setFeeKrw(p.getFeeKrw());
+                fp.setFeeUsd(p.getFeeUsd());
+                fp.setTaxKrw(p.getTaxKrw());
+                fp.setTaxUsd(p.getTaxUsd());
+
             } else if("판매".equals(tradeType)) {
-                BigDecimal oldUsd = fp.getTotalInvestmentUsd() != null ? fp.getTotalInvestmentUsd() : BigDecimal.ZERO;
-                BigDecimal oldKrw = fp.getTotalInvestmentKrw() != null ? fp.getTotalInvestmentKrw() : BigDecimal.ZERO;
+                BigDecimal oldUsd = fp.getTotalBuyUsd() != null ? fp.getTotalBuyUsd() : BigDecimal.ZERO;
+                BigDecimal oldKrw = fp.getTotalBuyKrw() != null ? fp.getTotalBuyKrw() : BigDecimal.ZERO;
                 BigDecimal oldQty = fp.getQuantity() != null ? fp.getQuantity() : BigDecimal.ZERO;
 
                 if(oldUsd.compareTo(BigDecimal.ZERO) > 0 && oldKrw.compareTo(BigDecimal.ZERO) > 0) {
@@ -108,10 +129,28 @@ public class DashboardService {
                     BigDecimal sellAmountKrw = p.getTotalAmountKrw() != null ? p.getTotalAmountKrw() : BigDecimal.ZERO;
                     BigDecimal sellAmountUsd = p.getTotalAmountUsd() != null ? p.getTotalAmountUsd() : BigDecimal.ZERO;
                     BigDecimal sellQty = p.getQuantity() != null ? p.getQuantity() : BigDecimal.ZERO;
+                    BigDecimal sellAvgKrw = p.getAvgPriceKrw() != null ? p.getAvgPriceKrw() : BigDecimal.ZERO;
+                    BigDecimal sellAvgUsd = p.getAvgPriceUsd() != null ? p.getAvgPriceUsd() : BigDecimal.ZERO;
 
                     fp.setTotalInvestmentUsd(oldUsd.subtract(sellAmountUsd));
                     fp.setTotalInvestmentKrw(oldKrw.subtract(sellAmountKrw));
                     fp.setQuantity(oldQty.subtract(sellQty));
+
+                    fp.setSellQty(sellQty);
+                    fp.setTotalSellKrw(sellAmountKrw);
+                    fp.setTotalSellUsd(sellAmountUsd);
+                    fp.setAvgSellPriceKrw(sellAvgKrw);
+                    fp.setAvgSellPriceUsd(sellAvgUsd);
+
+                    BigDecimal oldFeeKrw = fp.getFeeKrw() != null ? fp.getFeeKrw() : BigDecimal.ZERO;
+                    BigDecimal oldFeeUsd = fp.getFeeUsd() != null ? fp.getFeeUsd() : BigDecimal.ZERO;
+                    BigDecimal oldTaxKrw = fp.getTaxKrw() != null ? fp.getTaxKrw() : BigDecimal.ZERO;
+                    BigDecimal oldTaxUsd = fp.getTaxUsd() != null ? fp.getTaxUsd() : BigDecimal.ZERO;
+
+                    fp.setFeeKrw(oldFeeKrw.add(p.getFeeKrw()));
+                    fp.setFeeUsd(oldFeeUsd.add(p.getFeeUsd()));
+                    fp.setTaxKrw(oldTaxKrw.add(p.getTaxKrw()));
+                    fp.setTaxUsd(oldTaxUsd.add(p.getTaxUsd()));
 
                     // 음수가 되지 않도록 보정
                     if(fp.getTotalInvestmentKrw().compareTo(BigDecimal.ZERO) < 0) {
@@ -205,6 +244,23 @@ public class DashboardService {
                     existingEntity.setDividendKrw(fdto.getDividendKrw());
                     existingEntity.setDividendUsd(fdto.getDividendUsd());
                     existingEntity.setSymbol(fdto.getSymbol());
+                    existingEntity.setTotalSellUsd(fdto.getTotalSellUsd());
+                    existingEntity.setTotalSellKrw(fdto.getTotalSellKrw());
+
+                    existingEntity.setSellQty(fdto.getSellQty());
+                    existingEntity.setAvgSellPriceKrw(fdto.getAvgSellPriceKrw());
+                    existingEntity.setAvgSellPriceUsd(fdto.getAvgSellPriceUsd());
+                    existingEntity.setAvgBuyPriceKrw(fdto.getAvgBuyPriceKrw());
+                    existingEntity.setAvgBuyPriceUsd(fdto.getAvgBuyPriceUsd());
+                    existingEntity.setBuyQty(fdto.getBuyQty());
+                    existingEntity.setTotalBuyKrw(fdto.getTotalBuyKrw());
+                    existingEntity.setTotalBuyUsd(fdto.getTotalBuyUsd());
+
+                    existingEntity.setFeeKrw(fdto.getFeeKrw());
+                    existingEntity.setFeeUsd(fdto.getFeeUsd());
+                    existingEntity.setTaxKrw(fdto.getTaxKrw());
+                    existingEntity.setTaxUsd(fdto.getTaxUsd());
+
                     // 다른 필드들도 필요시 업데이트
                     pRepo.save(existingEntity); // UPDATE 실행
                 } else {
@@ -289,6 +345,9 @@ public class DashboardService {
                 BigDecimal avgBuyKrw = totalBuyAmountKrw.divide(divisor, 0, java.math.RoundingMode.HALF_UP);
                 BigDecimal avgBuyUsd = totalBuyAmountUsd.divide(divisor, 8, java.math.RoundingMode.HALF_UP);
 
+                t.setAvgPriceUsd(avgBuyUsd);
+                t.setAvgPriceKrw(avgBuyKrw);
+
                 // 실현손익 = (판매단가 - 평균매수단가) × 판매수량
                 BigDecimal krwDiff = sellPriceKrw.subtract(avgBuyKrw).multiply(qty);
                 krwDiff = krwDiff.setScale(0, java.math.RoundingMode.HALF_UP);
@@ -352,6 +411,10 @@ public class DashboardService {
             BigDecimal avgKrw = toBigDecimal(r[5]);
             BigDecimal avgUsd = toBigDecimal(r[6]);
             String isin = r[7] != null ? r[7].toString() : null;
+            BigDecimal feeKrw = toBigDecimal(r[8]);
+            BigDecimal feeUsd = toBigDecimal(r[9]);
+            BigDecimal taxKrw = toBigDecimal(r[10]);
+            BigDecimal taxUsd = toBigDecimal(r[11]);
 
             PortfolioItemDto d = new PortfolioItemDto();
             d.setTradeType(tradeType);
@@ -362,6 +425,12 @@ public class DashboardService {
             d.setAvgPriceKrw(avgKrw);
             d.setAvgPriceUsd(avgUsd);
             d.setIsin(isin);
+
+            d.setFeeUsd(feeUsd);
+            d.setFeeKrw(feeKrw);
+            d.setTaxUsd(taxUsd);
+            d.setTaxKrw(taxKrw);
+
             return d;
         }).toList();
     }

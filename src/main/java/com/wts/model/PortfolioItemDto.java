@@ -1,5 +1,6 @@
 package com.wts.model;
 
+import jakarta.persistence.Column;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -29,8 +30,6 @@ public class PortfolioItemDto {
     private BigDecimal currentPriceUsd = BigDecimal.ZERO;
     private String companyName;
     private String symbol;
-    private BigDecimal totalValueUsd;
-    private BigDecimal totalValueKrw;
     private BigDecimal profitRateUsd;
     private BigDecimal profitRateKrw;
     private String sector;
@@ -46,9 +45,20 @@ public class PortfolioItemDto {
     private BigDecimal taxUsd;
     private BigDecimal profitKrw = BigDecimal.ZERO;
     private BigDecimal profitUsd = BigDecimal.ZERO;
+    private String isin;
+
+    private BigDecimal buyQty = BigDecimal.ZERO;
+    private BigDecimal sellQty = BigDecimal.ZERO;
+    private BigDecimal avgSellPriceUsd;
+    private BigDecimal avgSellPriceKrw;
+    private BigDecimal avgBuyPriceUsd;
+    private BigDecimal avgBuyPriceKrw;
     private BigDecimal totalInvestmentKrw;
     private BigDecimal totalInvestmentUsd;
-    private String isin;
+    private BigDecimal totalSellUsd;
+    private BigDecimal totalSellKrw;
+    private BigDecimal totalBuyUsd;
+    private BigDecimal totalBuyKrw;
 
     public PortfolioItemDto(Long userId, String companyName) {
         this.userId = userId;

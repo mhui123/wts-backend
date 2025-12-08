@@ -58,6 +58,7 @@ public interface TradeHistoryRepository extends JpaRepository<TradeHistory, Long
             "select th.trade_type, th.symbol_name, " +
                     " sum(th.amount_krw ) as total_amount_krw, sum(th.amount_usd) as total_amount_usd, sum(th.quantity) as quantity " +
                     " , avg(th.price_krw) as avg_price_krw, avg(th.price_usd) as avg_price_usd, th.isin " +
+                    " , sum(th.fee_krw) as fee_krw , sum(th.fee_usd) as fee_usd, sum(th.tax_krw) as tax_krw, sum(th.tax_usd) as tax_usd " +
                     " from stockdb.trade_history th " +
                     " where 1=1" +
                     " and th.user_id = :userId " +

@@ -44,15 +44,31 @@ public class PortfolioItem {
     private BigDecimal currentPriceUsd;
     @Column(name = "current_price_krw", precision = 19, scale = 4)
     private BigDecimal currentPriceKrw;
-    @Column(name = "total_value_usd", precision = 19, scale = 4)
-    private BigDecimal totalValueUsd;
-    @Column(name = "total_value_krw", precision = 19, scale = 4)
-    private BigDecimal totalValueKrw;
 
+    @Column(name = "buy_qty", precision = 20, scale = 6)
+    private BigDecimal buyQty = BigDecimal.ZERO;
+    @Column(name = "sell_qty", precision = 20, scale = 6)
+    private BigDecimal sellQty = BigDecimal.ZERO;
+    @Column(name = "avg_sell_price_usd", precision = 19, scale = 4)
+    private BigDecimal avgSellPriceUsd;
+    @Column(name = "avg_sell_price_krw", precision = 19, scale = 4)
+    private BigDecimal avgSellPriceKrw;
+    @Column(name = "avg_buy_price_usd", precision = 19, scale = 4)
+    private BigDecimal avgBuyPriceUsd;
+    @Column(name = "avg_buy_price_krw", precision = 19, scale = 4)
+    private BigDecimal avgBuyPriceKrw;
     @Column(name = "total_investment_krw", precision = 19, scale = 4)
     private BigDecimal totalInvestmentKrw;
     @Column(name = "total_investment_usd", precision = 19, scale = 4)
     private BigDecimal totalInvestmentUsd;
+    @Column(name = "total_sell_usd", precision = 19, scale = 4)
+    private BigDecimal totalSellUsd;
+    @Column(name = "total_sell_krw", precision = 19, scale = 4)
+    private BigDecimal totalSellKrw;
+    @Column(name = "total_buy_usd", precision = 19, scale = 4)
+    private BigDecimal totalBuyUsd;
+    @Column(name = "total_buy_krw", precision = 19, scale = 4)
+    private BigDecimal totalBuyKrw;
 
     @Column(name = "profit_usd", precision = 19, scale = 4)
     private BigDecimal profitUsd;
@@ -71,6 +87,18 @@ public class PortfolioItem {
 
     @Column(name = "dividend_krw", precision = 19, scale = 4)
     private BigDecimal dividendKrw;
+
+    @Column(name = "tax_usd", precision = 19, scale = 4)
+    private BigDecimal taxUsd;
+
+    @Column(name = "tax_krw", precision = 19, scale = 4)
+    private BigDecimal taxKrw;
+
+    @Column(name = "fee_usd", precision = 19, scale = 4)
+    private BigDecimal feeUsd;
+
+    @Column(name = "fee_krw", precision = 19, scale = 4)
+    private BigDecimal feeKrw;
 
     @Column(name = "sector", length = 30)
     private String sector;
@@ -93,14 +121,28 @@ public class PortfolioItem {
                 .avgPriceKrw(p.getAvgPriceKrw())
                 .currentPriceUsd(p.getCurrentPriceUsd())
                 .currentPriceKrw(p.getCurrentPriceKrw())
-                .totalValueUsd(p.getTotalValueUsd())
-                .totalValueKrw(p.getTotalValueKrw())
+                .totalSellUsd(p.getTotalSellUsd())
+                .totalSellKrw(p.getTotalSellKrw())
+                .totalBuyUsd(p.getTotalBuyUsd())
+                .totalBuyKrw(p.getTotalBuyKrw())
+                .buyQty(p.getBuyQty())
+                .sellQty(p.getSellQty())
+                .avgSellPriceUsd(p.getAvgSellPriceUsd())
+                .avgSellPriceKrw(p.getAvgSellPriceKrw())
+                .avgBuyPriceUsd(p.getAvgBuyPriceUsd())
+                .avgBuyPriceKrw(p.getAvgBuyPriceKrw())
                 .profitUsd(p.getProfitUsd())
                 .profitKrw(p.getProfitKrw())
                 .profitRateUsd(p.getProfitRateUsd())
                 .profitRateKrw(p.getProfitRateKrw())
                 .dividendUsd(p.getDividendUsd())
                 .dividendKrw(p.getDividendKrw())
+                .taxUsd(p.getTaxUsd())
+                .taxKrw(p.getTaxKrw())
+                .feeUsd(p.getFeeUsd())
+                .feeKrw(p.getFeeKrw())
+                .totalInvestmentKrw(p.getTotalInvestmentKrw())
+                .totalInvestmentUsd(p.getTotalInvestmentUsd())
                 .sector(p.getSector())
                 .weight(p.getWeight())
                 .build();

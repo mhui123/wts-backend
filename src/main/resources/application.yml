@@ -77,3 +77,10 @@ app:
   jwt:
     secret: change-me-please-change-this-to-a-secure-random-value
     exp-ms: 3600000
+
+
+external:
+  python-server:
+    base-url: http://localhost:19789
+    timeout: 30  # 타임아웃 (초)
+    max-retry: 3  # 최대 재시도 횟수

@@ -2,6 +2,7 @@ package com.wts.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+
 import java.time.LocalDateTime;
 
 @Entity
@@ -30,10 +31,20 @@ public class SymbolTicker {
     @Column(name = "ticker", length = 50)
     private String ticker;
 
-    // DB가 자동으로 채우는 TIMESTAMP 값을 읽기전용으로 매핑
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = createdAt;
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }
