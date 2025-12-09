@@ -5,6 +5,7 @@ import com.wts.model.*;
 import com.wts.repository.*;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +15,7 @@ import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @Transactional(readOnly = false)
 public class DashboardService {
@@ -43,11 +45,12 @@ public class DashboardService {
 
     public ProcessResult setDataToPortfolioItem(Long userId){
         try {
+            log.info("Syncronizing portfolio data for userId: {}", userId);
             List<PortfolioItemDto> fList = calculatePortfolio(userId);
             calProfitTo(userId, fList);
             return new ProcessResult(true, "포트폴리오 데이터 업데이트 완료");
         } catch (Exception e) {
-            return new ProcessResult(false, "포트폴리오 엡데이트 실패 :" + e.getMessage(),"PORTFOLIO_UPDATE_ERROR" );
+            return new ProcessResult(false, "포트폴리오 업데이트 실패 :" + e.getMessage(),"PORTFOLIO_UPDATE_ERROR" );
         }
 
     }

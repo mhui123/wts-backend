@@ -138,11 +138,13 @@ public class PythonServerService {
                     return createErrorProcess("거래내역 데이터가 없습니다.");
                 }
             } else {
-                return createErrorProcess("거래내역 업로드 실패: " + (response != null ? response.getMessage() : "알 수 없는 오류"));
+                String msg = response != null ? (response.getMessage().contains("rolled back") ? "거래내역 중복" : "알 수 없는 오류") : "알 수 없는 오류";
+                return createErrorProcess("거래내역 업로드 실패: " + msg);
             }
         } catch (Exception e) {
+            String msg = e.getMessage().contains("rolled back") ? "거래내역 중복" : "알 수 없는 오류";
             log.error("Python 서버 uploadTradeHistory 오류: ", e);
-            return createErrorProcess("거래내역 업로드 실패: " + e.getMessage());
+            return createErrorProcess("거래내역 업로드 실패: " + msg);
         }
     }
 

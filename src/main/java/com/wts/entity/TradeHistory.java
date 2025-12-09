@@ -8,7 +8,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "trade_history")
+@Table(name = "trade_history",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "ux_trade_history_unique",
+                        columnNames = {"user_id", "trade_date", "trade_type", "symbol_name", "isin", "quantity", "amount_krw", "balance_krw"})
+        })
 @Getter
 @Setter
 @NoArgsConstructor
@@ -28,10 +32,10 @@ public class TradeHistory {
     @Column(name = "trade_date", nullable = false)
     private LocalDate tradeDate;
 
-    @Column(name = "trade_type", nullable = false)
+    @Column(name = "trade_type", nullable = false, length = 30)
     private String tradeType;
 
-    @Column(name = "symbol_name")
+    @Column(name = "symbol_name", length = 150)
     private String symbolName;
 
     @Column(name = "fx_rate", precision = 38, scale = 6)
@@ -88,7 +92,7 @@ public class TradeHistory {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @Column(name = "isin", length = 255)
+    @Column(name = "isin", length = 12)
     private String isin;
 
     @PrePersist
