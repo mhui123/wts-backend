@@ -59,6 +59,9 @@ public class PortfolioItemDto {
     private BigDecimal totalSellKrw;
     private BigDecimal totalBuyUsd;
     private BigDecimal totalBuyKrw;
+    private BigDecimal ResetPointBuyUsd;
+    private BigDecimal preSellAvgPriceUsd;
+    private BigDecimal finalSellQty;
 
     public PortfolioItemDto(Long userId, String companyName) {
         this.userId = userId;

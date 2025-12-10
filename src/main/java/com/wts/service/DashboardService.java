@@ -46,7 +46,8 @@ public class DashboardService {
     public ProcessResult setDataToPortfolioItem(Long userId){
         try {
             log.info("Syncronizing portfolio data for userId: {}", userId);
-            List<PortfolioItemDto> fList = calculatePortfolio(userId);
+//            List<PortfolioItemDto> fList = calculatePortfolio(userId);
+            List<PortfolioItemDto> fList = calculatePortfolio_renew(userId);
             calProfitTo(userId, fList);
             return new ProcessResult(true, "포트폴리오 데이터 업데이트 완료");
         } catch (Exception e) {
@@ -443,6 +444,296 @@ public class DashboardService {
         if (o instanceof BigDecimal) return (BigDecimal) o;
         if (o instanceof Number) return BigDecimal.valueOf(((Number) o).doubleValue());
         try { return new BigDecimal(o.toString()); } catch (Exception ex) { return BigDecimal.ZERO; }
+    }
+
+    private List<PortfolioItemDto> calculatePortfolio_renew(Long userId){
+        //trade_history로부터 데이터를 얻어와서 계산.
+        List<String> types = List.of("외화증권배당금입금", "구매", "판매", "주식병합출고", "주식병합입고");
+        List<Object[]> rawList = thRepository.getGroupedTrList(userId, types);
+        List<PortfolioItemDto> pList = new ArrayList<>(convertToPList(rawList));
+
+        Map<String, BigDecimal> netBySymbol = calcNetBySymbolStream_renew(pList);
+        List<PortfolioItemDto> finalPList = new ArrayList<>();
+
+        for(String key : netBySymbol.keySet()){
+            PortfolioItemDto p = new PortfolioItemDto(userId, key);
+            finalPList.add(p);
+        }
+
+        // 종목별로 시간순 거래내역을 가져와서 처리 (엑셀 방식 적용)
+        for(String companyName : netBySymbol.keySet()) {
+            // 시간순 거래내역 조회 (기존 그룹화된 데이터가 아닌 개별 거래내역 필요)
+            rawList = thRepository.getTradeHistoryBySymbolAndUserIdOrderByTradeDate(userId, companyName, types);
+
+            // 시간순으로 정렬
+            List<TradeHistoryDto> transactions = rawList.stream().map(r -> {
+                LocalDate tDate = r[0] != null ? LocalDate.parse(r[0].toString()) : null;
+                String tradeType = r[1] != null ? r[1].toString() : null;
+                String symbolName = r[2] != null ? r[2].toString() : null;
+                BigDecimal quantity = toBigDecimal(r[3]);
+                BigDecimal amtKrw = toBigDecimal(r[4]);
+                BigDecimal amtUsd = toBigDecimal(r[5]);
+                BigDecimal prcKrw = toBigDecimal(r[6]);
+                BigDecimal prcUsd = toBigDecimal(r[7]);
+                BigDecimal feeKrw = toBigDecimal(r[8]);
+                BigDecimal feeUsd = toBigDecimal(r[9]);
+                BigDecimal taxKrw = toBigDecimal(r[10]);
+                BigDecimal taxUsd = toBigDecimal(r[11]);
+                String isin = r[12] != null ? r[12].toString() : null;
+
+                TradeHistoryDto d = new TradeHistoryDto();
+                d.setTradeDate(tDate);
+                d.setTradeType(tradeType);
+                d.setSymbolName(symbolName);
+                d.setQuantity(quantity);
+                d.setAmountKrw(amtKrw);
+                d.setAmountUsd(amtUsd);
+                d.setPriceKrw(prcKrw);
+                d.setPriceUsd(prcUsd);
+                d.setFeeKrw(feeKrw);
+                d.setFeeUsd(feeUsd);
+                d.setTaxKrw(taxKrw);
+                d.setTaxUsd(taxUsd);
+                d.setIsin(isin);
+
+                return d;
+            }).toList();
+
+            PortfolioItemDto fp = finalPList.stream()
+                    .filter(item -> item.getCompanyName().equals(companyName))
+                    .findFirst()
+                    .orElse(new PortfolioItemDto(userId, companyName));
+
+            // 심볼 정보 설정
+            setSymbolInfo(fp, transactions.isEmpty() ? null : transactions.get(0).getIsin());
+
+            // 엑셀 방식: 전량매도 기점 리셋을 고려한 계산
+            PortfolioItemDto result = calculateInvestmentWithResets(transactions);
+
+            // 결과 설정
+            fp.setTotalBuyUsd(result.getTotalBuyUsd());
+            fp.setTotalBuyKrw(result.getTotalBuyKrw());
+            fp.setBuyQty(result.getBuyQty());
+            fp.setTotalSellUsd(result.getTotalSellUsd());
+            fp.setTotalSellKrw(result.getTotalSellKrw());
+            fp.setSellQty(result.getSellQty());
+            fp.setDividendUsd(result.getDividendUsd());
+            fp.setDividendKrw(result.getDividendKrw());
+            fp.setFeeUsd(result.getFeeUsd());
+            fp.setFeeKrw(result.getFeeKrw());
+            fp.setTaxUsd(result.getTaxUsd());
+            fp.setTaxKrw(result.getTaxKrw());
+
+            // 평균 단가 설정
+            fp.setAvgBuyPriceUsd(result.getAvgBuyPriceUsd());
+            fp.setAvgBuyPriceKrw(result.getAvgBuyPriceKrw());
+            fp.setAvgSellPriceUsd(result.getAvgSellPriceUsd());
+            fp.setAvgSellPriceKrw(result.getAvgSellPriceKrw());
+
+            // 투자원금 설정 (엑셀 공식 결과)
+            BigDecimal netQuantity = netBySymbol.getOrDefault(companyName, BigDecimal.ZERO);
+            if (netQuantity.compareTo(BigDecimal.ZERO) <= 0) {
+                fp.setTotalInvestmentKrw(BigDecimal.ZERO);
+                fp.setTotalInvestmentUsd(BigDecimal.ZERO);
+            } else {
+                // 엑셀 방식: 전량매도 이후 구간의 투자원금 계산
+                fp.setTotalInvestmentKrw(result.getTotalInvestmentKrw().compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : result.getTotalInvestmentKrw());
+                fp.setTotalInvestmentUsd(result.getTotalInvestmentUsd().compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : result.getTotalInvestmentUsd());
+            }
+
+            fp.setQuantity(netQuantity);
+            fp.setUserId(userId);
+
+            log.debug("티커:{} 투자원금usd:{} 리셋기점 총구매금액 - (판매직전 평균매수단가 × 리셋후 총판매수량) : {} - ({} * {})",
+                    fp.getSymbol(),
+                    fp.getTotalInvestmentUsd(),
+                    result.getResetPointBuyUsd(),
+                    result.getPreSellAvgPriceUsd(),
+                    result.getFinalSellQty()
+            );
+        }
+
+        return finalPList;
+    }
+
+    /**
+     * 전량매도 기점 리셋을 고려한 투자원금 계산 (엑셀 로직 구현)
+     */
+    private PortfolioItemDto calculateInvestmentWithResets(List<TradeHistoryDto> transactions) {
+        PortfolioItemDto result = new PortfolioItemDto();
+
+        // 현재 구간 추적 변수
+        BigDecimal currentQty = BigDecimal.ZERO;
+        BigDecimal currentBuyAmountUsd = BigDecimal.ZERO;
+        BigDecimal currentBuyAmountKrw = BigDecimal.ZERO;
+        BigDecimal currentBuyQty = BigDecimal.ZERO;
+        BigDecimal currentSellQty = BigDecimal.ZERO;
+
+        // 최종 구간(현재 보유분) 추적 변수
+        BigDecimal finalBuyAmountUsd = BigDecimal.ZERO;
+        BigDecimal finalBuyAmountKrw = BigDecimal.ZERO;
+        BigDecimal finalBuyQty = BigDecimal.ZERO;
+        BigDecimal finalSellQty = BigDecimal.ZERO;
+        BigDecimal preSellAvgPriceUsd = BigDecimal.ZERO;
+        BigDecimal preSellAvgPriceKrw = BigDecimal.ZERO;
+
+        // 전체 누적 변수 (통계용)
+        BigDecimal totalSellAmountUsd = BigDecimal.ZERO;
+        BigDecimal totalSellAmountKrw = BigDecimal.ZERO;
+        BigDecimal totalDividendUsd = BigDecimal.ZERO;
+        BigDecimal totalDividendKrw = BigDecimal.ZERO;
+        BigDecimal totalFeeUsd = BigDecimal.ZERO;
+        BigDecimal totalFeeKrw = BigDecimal.ZERO;
+        BigDecimal totalTaxUsd = BigDecimal.ZERO;
+        BigDecimal totalTaxKrw = BigDecimal.ZERO;
+
+        boolean inFinalSegment = false; // 현재 최종 구간(전량매도 후 마지막 구간)인지 여부
+
+        for (TradeHistoryDto tx : transactions) {
+            String tradeType = tx.getTradeType();
+            BigDecimal qty = tx.getQuantity() != null ? tx.getQuantity() : BigDecimal.ZERO;
+            BigDecimal amountUsd = tx.getAmountUsd() != null ? tx.getAmountUsd() : BigDecimal.ZERO;
+            BigDecimal amountKrw = tx.getAmountKrw() != null ? tx.getAmountKrw() : BigDecimal.ZERO;
+
+            if ("외화증권배당금입금".equals(tradeType)) {
+                totalDividendUsd = totalDividendUsd.add(amountUsd);
+                totalDividendKrw = totalDividendKrw.add(amountKrw);
+
+            } else if ("구매".equals(tradeType)) {
+                currentQty = currentQty.add(qty);
+                currentBuyAmountUsd = currentBuyAmountUsd.add(amountUsd);
+                currentBuyAmountKrw = currentBuyAmountKrw.add(amountKrw);
+                currentBuyQty = currentBuyQty.add(qty);
+
+                // 수수료/세금 누적
+                totalFeeUsd = totalFeeUsd.add(tx.getFeeUsd() != null ? tx.getFeeUsd() : BigDecimal.ZERO);
+                totalFeeKrw = totalFeeKrw.add(tx.getFeeKrw() != null ? tx.getFeeKrw() : BigDecimal.ZERO);
+                totalTaxUsd = totalTaxUsd.add(tx.getTaxUsd() != null ? tx.getTaxUsd() : BigDecimal.ZERO);
+                totalTaxKrw = totalTaxKrw.add(tx.getTaxKrw() != null ? tx.getTaxKrw() : BigDecimal.ZERO);
+
+            } else if ("판매".equals(tradeType)) {
+                // 판매 직전 평균단가 계산 및 저장
+                if (currentBuyQty.compareTo(BigDecimal.ZERO) > 0) {
+                    preSellAvgPriceUsd = currentBuyAmountUsd.divide(currentBuyQty, 8, java.math.RoundingMode.HALF_UP);
+                    preSellAvgPriceKrw = currentBuyAmountKrw.divide(currentBuyQty, 0, java.math.RoundingMode.HALF_UP);
+                }
+
+                currentQty = currentQty.subtract(qty);
+                totalSellAmountUsd = totalSellAmountUsd.add(amountUsd);
+                totalSellAmountKrw = totalSellAmountKrw.add(amountKrw);
+
+                // 수수료/세금 누적
+                totalFeeUsd = totalFeeUsd.add(tx.getFeeUsd() != null ? tx.getFeeUsd() : BigDecimal.ZERO);
+                totalFeeKrw = totalFeeKrw.add(tx.getFeeKrw() != null ? tx.getFeeKrw() : BigDecimal.ZERO);
+                totalTaxUsd = totalTaxUsd.add(tx.getTaxUsd() != null ? tx.getTaxUsd() : BigDecimal.ZERO);
+                totalTaxKrw = totalTaxKrw.add(tx.getTaxKrw() != null ? tx.getTaxKrw() : BigDecimal.ZERO);
+
+                // 전량매도 감지
+                if (currentQty.compareTo(BigDecimal.ZERO) <= 0) {
+                    log.debug("[{}], {} 전량매도 발생", tx.getTradeDate(), tx.getSymbolName());
+                    // 리셋: 다음 구매부터 새로운 구간 시작
+                    currentBuyAmountUsd = BigDecimal.ZERO;
+                    currentBuyAmountKrw = BigDecimal.ZERO;
+                    currentBuyQty = BigDecimal.ZERO;
+                    currentQty = BigDecimal.ZERO;
+
+                    // 기존 최종 구간 데이터 초기화 (새로운 구간 시작)
+                    finalBuyAmountUsd = BigDecimal.ZERO;
+                    finalBuyAmountKrw = BigDecimal.ZERO;
+                    finalBuyQty = BigDecimal.ZERO;
+                    finalSellQty = BigDecimal.ZERO;
+                    inFinalSegment = true;
+                } else {
+                    // 부분매도: 최종 구간에서 판매수량 누적
+                    log.debug("[{}], {} {}개 부분매도 발생", tx.getTradeDate(), tx.getSymbolName(), tx.getQuantity());
+                    if (inFinalSegment) {
+                        finalSellQty = finalSellQty.add(qty);
+                    } else {
+                        currentSellQty = currentSellQty.add(qty);
+                    }
+                }
+            }
+
+            // 현재 보유수량이 있고 전량매도 이후라면 최종 구간 데이터 업데이트
+            if (currentQty.compareTo(BigDecimal.ZERO) > 0 && inFinalSegment) {
+                finalBuyAmountUsd = currentBuyAmountUsd;
+                finalBuyAmountKrw = currentBuyAmountKrw;
+                finalBuyQty = currentBuyQty;
+            }
+        }
+
+        // 최종 구간이 없다면 전체 구간을 최종 구간으로 사용
+        if (!inFinalSegment) {
+            finalBuyAmountUsd = currentBuyAmountUsd;
+            finalBuyAmountKrw = currentBuyAmountKrw;
+            finalBuyQty = currentBuyQty;
+            finalSellQty = currentSellQty;
+        }
+
+        // 엑셀 공식 적용: 최종구간 총구매금액 - (판매직전 평균매수단가 × 최종구간 판매수량)
+        BigDecimal investmentUsd = finalBuyAmountUsd;
+        BigDecimal investmentKrw = finalBuyAmountKrw;
+
+        if (finalSellQty.compareTo(BigDecimal.ZERO) > 0 && preSellAvgPriceUsd.compareTo(BigDecimal.ZERO) > 0) {
+            investmentUsd = finalBuyAmountUsd.subtract(preSellAvgPriceUsd.multiply(finalSellQty));
+            investmentKrw = finalBuyAmountKrw.subtract(preSellAvgPriceKrw.multiply(finalSellQty));
+        }
+
+        // 결과 설정
+        result.setTotalBuyUsd(currentBuyAmountUsd); // 현재 구간 구매금액
+        result.setTotalBuyKrw(currentBuyAmountKrw);
+        result.setBuyQty(currentBuyQty);
+        result.setTotalSellUsd(totalSellAmountUsd);
+        result.setTotalSellKrw(totalSellAmountKrw);
+        result.setSellQty(finalSellQty); // 최종 구간 판매수량
+        result.setDividendUsd(totalDividendUsd);
+        result.setDividendKrw(totalDividendKrw);
+        result.setFeeUsd(totalFeeUsd);
+        result.setFeeKrw(totalFeeKrw);
+        result.setTaxUsd(totalTaxUsd);
+        result.setTaxKrw(totalTaxKrw);
+        result.setTotalInvestmentUsd(investmentUsd);
+        result.setTotalInvestmentKrw(investmentKrw);
+
+        // 로그용 추가 정보
+        result.setResetPointBuyUsd(finalBuyAmountUsd);
+        result.setPreSellAvgPriceUsd(preSellAvgPriceUsd);
+        result.setFinalSellQty(finalSellQty);
+
+        return result;
+    }
+
+    // 심볼 정보 설정 메서드 분리
+    private void setSymbolInfo(PortfolioItemDto fp, String isin) {
+        if (isin == null) return;
+
+        Optional<SymbolTicker> found = sRepo.findByIsin(isin);
+        if (found.isPresent()) {
+            SymbolTicker s = found.get();
+            String symbol = s.getTicker();
+            if(symbol != null && !symbol.isEmpty()) {
+                fp.setSymbol(s.getTicker());
+            } else {
+                ProcessResult r = pService.getTicker(isin);
+                String ticker = r.isSuccess() ? r.getMessage() : "";
+                if(ticker != null && !ticker.isEmpty()) {
+                    fp.setSymbol(ticker);
+                    s.setTicker(ticker);
+                    sRepo.save(s);
+                }
+            }
+        } else {
+            ProcessResult r = pService.getTicker(isin);
+            String ticker = r.isSuccess() ? r.getMessage() : "";
+            if(ticker != null && !ticker.isEmpty()) {
+                fp.setSymbol(ticker);
+                SymbolTicker newSymbolTicker = new SymbolTicker();
+                newSymbolTicker.setIsin(isin);
+                newSymbolTicker.setTicker(ticker);
+                newSymbolTicker.setSymbolName(fp.getCompanyName());
+                sRepo.save(newSymbolTicker);
+            }
+        }
     }
 
 }

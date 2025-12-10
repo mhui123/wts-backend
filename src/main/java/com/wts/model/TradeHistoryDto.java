@@ -35,5 +35,6 @@ public class TradeHistoryDto {
     private Integer sourceRow;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private String isin;
 }
 
