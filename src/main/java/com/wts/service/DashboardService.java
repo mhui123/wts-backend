@@ -631,6 +631,10 @@ public class DashboardService {
                 // 전량매도 감지
                 if (currentQty.compareTo(BigDecimal.ZERO) <= 0) {
                     log.debug("[{}], {} 전량매도 발생", tx.getTradeDate(), tx.getSymbolName());
+                    //전량매도 후 다음 거래가 없을 경우 데이터 보존을 위함
+                    finalBuyAmountUsd = currentBuyAmountUsd;
+                    finalBuyAmountKrw = currentBuyAmountKrw;
+                    finalBuyQty = currentBuyQty;
                     // 리셋: 다음 구매부터 새로운 구간 시작
                     currentBuyAmountUsd = BigDecimal.ZERO;
                     currentBuyAmountKrw = BigDecimal.ZERO;
@@ -638,9 +642,6 @@ public class DashboardService {
                     currentQty = BigDecimal.ZERO;
 
                     // 기존 최종 구간 데이터 초기화 (새로운 구간 시작)
-                    finalBuyAmountUsd = BigDecimal.ZERO;
-                    finalBuyAmountKrw = BigDecimal.ZERO;
-                    finalBuyQty = BigDecimal.ZERO;
                     finalSellQty = BigDecimal.ZERO;
                     inFinalSegment = true;
                 } else {
@@ -656,6 +657,7 @@ public class DashboardService {
 
             // 현재 보유수량이 있고 전량매도 이후라면 최종 구간 데이터 업데이트
             if (currentQty.compareTo(BigDecimal.ZERO) > 0 && inFinalSegment) {
+                log.debug("[{}], {} 최종 구간 데이터 업데이트 {} -> {} , {} -> {}", tx.getTradeDate(), tx.getSymbolName(),  finalBuyAmountUsd, currentBuyAmountUsd,  finalBuyQty, currentBuyQty);
                 finalBuyAmountUsd = currentBuyAmountUsd;
                 finalBuyAmountKrw = currentBuyAmountKrw;
                 finalBuyQty = currentBuyQty;
@@ -664,6 +666,7 @@ public class DashboardService {
 
         // 최종 구간이 없다면 전체 구간을 최종 구간으로 사용
         if (!inFinalSegment) {
+            log.debug("최종 구간이 없다");
             finalBuyAmountUsd = currentBuyAmountUsd;
             finalBuyAmountKrw = currentBuyAmountKrw;
             finalBuyQty = currentBuyQty;
@@ -680,9 +683,9 @@ public class DashboardService {
         }
 
         // 결과 설정
-        result.setTotalBuyUsd(currentBuyAmountUsd); // 현재 구간 구매금액
-        result.setTotalBuyKrw(currentBuyAmountKrw);
-        result.setBuyQty(currentBuyQty);
+        result.setTotalBuyUsd(finalBuyAmountUsd); // 현재 구간 구매금액
+        result.setTotalBuyKrw(finalBuyAmountKrw);
+        result.setBuyQty(finalBuyQty);
         result.setTotalSellUsd(totalSellAmountUsd);
         result.setTotalSellKrw(totalSellAmountKrw);
         result.setSellQty(finalSellQty); // 최종 구간 판매수량
@@ -699,7 +702,6 @@ public class DashboardService {
         result.setResetPointBuyUsd(finalBuyAmountUsd);
         result.setPreSellAvgPriceUsd(preSellAvgPriceUsd);
         result.setFinalSellQty(finalSellQty);
-
         return result;
     }
 
