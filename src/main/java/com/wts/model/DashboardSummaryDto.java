@@ -21,8 +21,7 @@ public class DashboardSummaryDto {
     private BigDecimal totalDividendUsd;
     private BigDecimal totalProfitKrw;
     private BigDecimal totalProfitUsd;
-    private List<Optional<DashboardStockDto>> stockList;
-    private List<PortfolioItem> detailList;
+    private List<PortfolioItemDto> detailList;
 
     // 추후 필요시 KRW 환산값 등을 추가 가능
 

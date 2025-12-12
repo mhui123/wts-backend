@@ -12,22 +12,22 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @Builder
 public class PortfolioItemDto {
-
+    //trade_history
     private Long userId;
     private String symbolName;
     private String ticker;
     private String tradeType;
-    private BigDecimal quantity = BigDecimal.ZERO;
-    private BigDecimal avgPriceKrw = BigDecimal.ZERO;
-    private BigDecimal avgPriceUsd = BigDecimal.ZERO;
-    private BigDecimal totalAmountKrw = BigDecimal.ZERO;
-    private BigDecimal totalAmountUsd = BigDecimal.ZERO;
-    private BigDecimal profitLossKrw = BigDecimal.ZERO;
-    private BigDecimal profitLossUsd = BigDecimal.ZERO;
-    private BigDecimal dividendKrw = BigDecimal.ZERO;
-    private BigDecimal dividendUsd = BigDecimal.ZERO;
-    private BigDecimal currentPriceKrw = BigDecimal.ZERO;
-    private BigDecimal currentPriceUsd = BigDecimal.ZERO;
+    private BigDecimal quantity;
+    private BigDecimal avgPriceKrw;
+    private BigDecimal avgPriceUsd;
+    private BigDecimal totalAmountKrw;
+    private BigDecimal totalAmountUsd;
+    private BigDecimal profitLossKrw;
+    private BigDecimal profitLossUsd;
+    private BigDecimal dividendKrw;
+    private BigDecimal dividendUsd;
+    private BigDecimal currentPriceKrw;
+    private BigDecimal currentPriceUsd;
     private String companyName;
     private String symbol;
     private BigDecimal profitRateUsd;
@@ -43,12 +43,13 @@ public class PortfolioItemDto {
     private BigDecimal feeUsd;
     private BigDecimal taxKrw;
     private BigDecimal taxUsd;
-    private BigDecimal profitKrw = BigDecimal.ZERO;
-    private BigDecimal profitUsd = BigDecimal.ZERO;
+    private BigDecimal profitKrw;
+    private BigDecimal profitUsd;
     private String isin;
 
-    private BigDecimal buyQty = BigDecimal.ZERO;
-    private BigDecimal sellQty = BigDecimal.ZERO;
+    //portfolio_item
+    private BigDecimal buyQty;
+    private BigDecimal sellQty;
     private BigDecimal avgSellPriceUsd;
     private BigDecimal avgSellPriceKrw;
     private BigDecimal avgBuyPriceUsd;
