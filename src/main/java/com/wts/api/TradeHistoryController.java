@@ -1,9 +1,6 @@
 package com.wts.api;
 
-import com.wts.model.DashboardSummaryDto;
-import com.wts.model.PortfolioItemDto;
-import com.wts.model.ProcessResult;
-import com.wts.model.TradeHistoryDto;
+import com.wts.model.*;
 import com.wts.service.DashboardService;
 import com.wts.service.TradeHistoryService;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -58,6 +55,19 @@ public class TradeHistoryController {
     public ResponseEntity<ProcessResult> syncLatestPortfolioItems(@RequestParam(name = "userId", required = false) Long userId) {
         ProcessResult result = dashboardService.setDataToPortfolioItem(userId);
         return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/getStockDetailInfo")
+    public ResponseEntity<StockDetailDto> getStockDetailInfo(@RequestParam(name = "userId", required = false) Long userId,
+                                                             @RequestParam(name = "ticker", required = false) String ticker) {
+        try{
+            StockDetailDto dto = dashboardService.callStockDetailInfo(userId, ticker);
+            return ResponseEntity.ok(dto);
+        } catch (Exception e){
+            return ResponseEntity.badRequest().build();
+        }
+
+
     }
 
 }

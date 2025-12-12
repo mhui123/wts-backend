@@ -27,18 +27,22 @@ public class DashboardService {
     private final PortfolioItemRepository pRepo;
     private final SymbolTickerRepository sRepo;
     private final PythonServerService pService;
+    private final StockDistributionRepository disRepo;
 
-    public DashboardService(TradeHistoryRepository thRepository, PortfolioItemRepository portfolioItemRepository, SymbolTickerRepository sRepo, PythonServerService pService) {
+    public DashboardService(TradeHistoryRepository thRepository, PortfolioItemRepository portfolioItemRepository
+            , SymbolTickerRepository sRepo, PythonServerService pService, StockDistributionRepository disRepo) {
         this.thRepository = thRepository;
         this.pRepo = portfolioItemRepository;
         this.sRepo = sRepo;
         this.pService = pService;
+        this.disRepo = disRepo;
     }
 
     public DashboardSummaryDto getDashboardData(Long userId){
         DashboardSummaryDto dto = new DashboardSummaryDto();
         List<PortfolioItem> pList = pRepo.findByUserId(userId);
-        dto.setDetailList(pList);
+        List<PortfolioItemDto> pdtoList = pList.stream().map(PortfolioItem::toDto).toList();
+        dto.setDetailList(pdtoList);
 
         return dto;
     }
@@ -54,129 +58,6 @@ public class DashboardService {
             return new ProcessResult(false, "포트폴리오 업데이트 실패 :" + e.getMessage(),"PORTFOLIO_UPDATE_ERROR" );
         }
 
-    }
-
-    private List<PortfolioItemDto> calculatePortfolio(Long userId){
-        //trade_history로부터 데이터를 얻어와서 계산.
-        List<String> types = List.of("외화증권배당금입금", "구매", "판매", "주식병합출고", "주식병합입고");
-        List<Object[]> rawList = thRepository.getGroupedTrList(userId, types);
-        List<PortfolioItemDto> pList = new ArrayList<>(convertToPList(rawList));
-
-        Map<String, BigDecimal> netBySymbol = calcNetBySymbolStream_renew(pList);
-        List<PortfolioItemDto> finalPList = new ArrayList<>();
-
-        for(String key : netBySymbol.keySet()){
-            PortfolioItemDto p = new PortfolioItemDto(userId, key);
-            finalPList.add(p);
-        }
-
-        for (PortfolioItemDto p : pList) {
-            PortfolioItemDto fp = finalPList.stream()
-                    .filter(item -> item.getCompanyName().equals(p.getSymbolName()))
-                    .findFirst()
-                    .orElse(new PortfolioItemDto(userId, p.getSymbolName()));
-            Optional<SymbolTicker> found = sRepo.findByIsin(p.getIsin());
-
-            if (found.isPresent()) {
-                SymbolTicker s = found.get();
-                String symbol = s.getTicker();
-                if(symbol != null && !symbol.isEmpty()) {
-                    fp.setSymbol(s.getTicker());
-                } else {
-                    //파이썬서버에 외부로부터 ticker 호출.
-                    ProcessResult r = pService.getTicker(p.getIsin());
-                    String ticker = r.isSuccess() ? r.getMessage() : "";
-                    if(ticker != null && !ticker.isEmpty()) {
-                        fp.setSymbol(ticker);
-                        s.setTicker(ticker);
-                        sRepo.save(s);
-                    }
-                }
-            } else {
-                // found가 empty인 경우 (기존에 ISIN으로 조회된 데이터가 없는 경우)
-                ProcessResult r = pService.getTicker(p.getIsin());
-                String ticker = r.isSuccess() ? r.getMessage() : "";
-                if(ticker != null && !ticker.isEmpty()) {
-                    fp.setSymbol(ticker);
-                    // 새로운 SymbolTicker 엔티티 생성 및 저장
-                    SymbolTicker newSymbolTicker = new SymbolTicker();
-                    newSymbolTicker.setIsin(p.getIsin());
-                    newSymbolTicker.setTicker(ticker);
-                    newSymbolTicker.setSymbolName(p.getSymbolName());
-                    sRepo.save(newSymbolTicker);
-                }
-            }
-
-            String tradeType = p.getTradeType();
-            String companyName = p.getCompanyName() == null ? p.getSymbolName() : p.getCompanyName();
-            if ("외화증권배당금입금".equals(tradeType)) {
-                fp.setDividendKrw(p.getTotalAmountKrw());
-                fp.setDividendUsd(p.getTotalAmountUsd());
-            } else if("구매".equals(tradeType)) {
-                fp.setAvgBuyPriceKrw(p.getAvgPriceKrw());
-                fp.setAvgBuyPriceUsd(p.getAvgPriceUsd());
-                fp.setTotalBuyKrw(p.getTotalAmountKrw());
-                fp.setTotalBuyUsd(p.getTotalAmountUsd());
-                fp.setBuyQty(p.getQuantity());
-                fp.setFeeKrw(p.getFeeKrw());
-                fp.setFeeUsd(p.getFeeUsd());
-                fp.setTaxKrw(p.getTaxKrw());
-                fp.setTaxUsd(p.getTaxUsd());
-
-            } else if("판매".equals(tradeType)) {
-                BigDecimal oldUsd = fp.getTotalBuyUsd() != null ? fp.getTotalBuyUsd() : BigDecimal.ZERO;
-                BigDecimal oldKrw = fp.getTotalBuyKrw() != null ? fp.getTotalBuyKrw() : BigDecimal.ZERO;
-                BigDecimal oldQty = fp.getQuantity() != null ? fp.getQuantity() : BigDecimal.ZERO;
-
-                if(oldUsd.compareTo(BigDecimal.ZERO) > 0 && oldKrw.compareTo(BigDecimal.ZERO) > 0) {
-                    // 판매한 금액을 차감 (현재 판매 거래의 금액)
-                    BigDecimal sellAmountKrw = p.getTotalAmountKrw() != null ? p.getTotalAmountKrw() : BigDecimal.ZERO;
-                    BigDecimal sellAmountUsd = p.getTotalAmountUsd() != null ? p.getTotalAmountUsd() : BigDecimal.ZERO;
-                    BigDecimal sellQty = p.getQuantity() != null ? p.getQuantity() : BigDecimal.ZERO;
-                    BigDecimal sellAvgKrw = p.getAvgPriceKrw() != null ? p.getAvgPriceKrw() : BigDecimal.ZERO;
-                    BigDecimal sellAvgUsd = p.getAvgPriceUsd() != null ? p.getAvgPriceUsd() : BigDecimal.ZERO;
-
-                    fp.setTotalInvestmentUsd(oldUsd.subtract(sellAmountUsd));
-                    fp.setTotalInvestmentKrw(oldKrw.subtract(sellAmountKrw));
-                    fp.setQuantity(oldQty.subtract(sellQty));
-
-                    fp.setSellQty(sellQty);
-                    fp.setTotalSellKrw(sellAmountKrw);
-                    fp.setTotalSellUsd(sellAmountUsd);
-                    fp.setAvgSellPriceKrw(sellAvgKrw);
-                    fp.setAvgSellPriceUsd(sellAvgUsd);
-
-                    BigDecimal oldFeeKrw = fp.getFeeKrw() != null ? fp.getFeeKrw() : BigDecimal.ZERO;
-                    BigDecimal oldFeeUsd = fp.getFeeUsd() != null ? fp.getFeeUsd() : BigDecimal.ZERO;
-                    BigDecimal oldTaxKrw = fp.getTaxKrw() != null ? fp.getTaxKrw() : BigDecimal.ZERO;
-                    BigDecimal oldTaxUsd = fp.getTaxUsd() != null ? fp.getTaxUsd() : BigDecimal.ZERO;
-
-                    fp.setFeeKrw(oldFeeKrw.add(p.getFeeKrw()));
-                    fp.setFeeUsd(oldFeeUsd.add(p.getFeeUsd()));
-                    fp.setTaxKrw(oldTaxKrw.add(p.getTaxKrw()));
-                    fp.setTaxUsd(oldTaxUsd.add(p.getTaxUsd()));
-
-                    // 음수가 되지 않도록 보정
-                    if(fp.getTotalInvestmentKrw().compareTo(BigDecimal.ZERO) < 0) {
-                        fp.setTotalInvestmentKrw(BigDecimal.ZERO);
-                    }
-                    if(fp.getTotalInvestmentUsd().compareTo(BigDecimal.ZERO) < 0) {
-                        fp.setTotalInvestmentUsd(BigDecimal.ZERO);
-                    }
-                }
-            }
-
-            BigDecimal netQuantity = netBySymbol.getOrDefault(companyName, BigDecimal.ZERO);
-            if (netQuantity.compareTo(BigDecimal.ZERO) <= 0) {
-                fp.setTotalInvestmentKrw(BigDecimal.ZERO);
-                fp.setTotalInvestmentUsd(BigDecimal.ZERO);
-            }
-
-            fp.setQuantity(netQuantity);
-            fp.setUserId(userId);
-        }
-
-        return finalPList;
     }
 
     public void calProfitTo(Long userId, List<PortfolioItemDto> pList){
@@ -736,6 +617,29 @@ public class DashboardService {
                 sRepo.save(newSymbolTicker);
             }
         }
+    }
+
+    public StockDetailDto callStockDetailInfo(Long userId, String ticker){
+        StockDetailDto dto = new StockDetailDto(ticker);
+        String symbolName = sRepo.findByTicker(ticker)
+                .map(SymbolTicker::getSymbolName)
+                .orElse(ticker);
+
+        List<TradeHistory> rawTrList = thRepository.findByUserIdAndSymbolNameAndTradeType(userId, symbolName, "외화증권배당금입금");
+        List<DividendDetailDto> receivedInfo = rawTrList.stream()
+                .map(TradeHistory::toDividendDto)
+                .toList();
+
+        dto.setReceivedInfo(receivedInfo);
+
+        List<StockDistribution> declaredInfo = disRepo.findByTicker(ticker);
+        List<StockDistributionDto> declaredDto = declaredInfo.stream()
+                .map(StockDistribution::toDto)
+                .toList();
+
+        dto.setDeclaredInfo(declaredDto);
+
+        return dto;
     }
 
 }

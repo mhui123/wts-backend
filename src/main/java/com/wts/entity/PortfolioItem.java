@@ -159,4 +159,39 @@ public class PortfolioItem {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
+
+    public static PortfolioItemDto toDto(PortfolioItem p) {
+        return PortfolioItemDto.builder().
+                userId(p.getUserId()).
+                companyName(p.getCompanyName()).
+                symbol(p.getSymbol()).
+                quantity(p.getQuantity()).
+                avgPriceUsd(p.getAvgPriceUsd()).
+                avgPriceKrw(p.getAvgPriceKrw()).
+                currentPriceUsd(p.getCurrentPriceUsd()).
+                currentPriceKrw(p.getCurrentPriceKrw()).
+                totalSellUsd(p.getTotalSellUsd()).
+                totalSellKrw(p.getTotalSellKrw()).
+                totalBuyUsd(p.getTotalBuyUsd()).
+                totalBuyKrw(p.getTotalBuyKrw()).
+                buyQty(p.getBuyQty()).
+                sellQty(p.getSellQty()).
+                avgSellPriceUsd(p.getAvgSellPriceUsd()).
+                avgSellPriceKrw(p.getAvgSellPriceKrw()).
+                avgBuyPriceUsd(p.getAvgBuyPriceUsd()).
+                avgBuyPriceKrw(p.getAvgBuyPriceKrw()).
+                profitUsd(p.getProfitUsd()).
+                profitKrw(p.getProfitKrw()).
+                profitRateUsd(p.getProfitRateUsd()).
+                profitRateKrw(p.getProfitRateKrw()).
+                dividendUsd(p.getDividendUsd()).
+                dividendKrw(p.getDividendKrw()).
+                taxUsd(p.getTaxUsd()).
+                taxKrw(p.getTaxKrw()).
+                feeUsd(p.getFeeUsd()).
+                feeKrw(p.getFeeKrw()).
+                totalInvestmentKrw(p.getTotalInvestmentKrw()).
+                totalInvestmentUsd(p.getTotalInvestmentUsd()).
+                build();
+    }
 }

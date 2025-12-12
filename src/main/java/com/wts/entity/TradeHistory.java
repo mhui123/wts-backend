@@ -1,5 +1,6 @@
 package com.wts.entity;
 
+import com.wts.model.DividendDetailDto;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -103,6 +104,20 @@ public class TradeHistory {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    public static DividendDetailDto toDividendDto(TradeHistory t) {
+        return DividendDetailDto.builder()
+                .userId(t.getUser() != null ? t.getUser().getId() : null)
+                .tradeDate(t.getTradeDate())
+                .tradeType(t.getTradeType())
+                .symbolName(t.getSymbolName())
+                .quantity(t.getQuantity())
+                .amountKrw(t.getAmountKrw())
+                .amountUsd(t.getAmountUsd())
+                .taxKrw(t.getTaxKrw())
+                .taxUsd(t.getTaxUsd())
+                .build();
     }
 }
 
