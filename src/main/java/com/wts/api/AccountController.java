@@ -4,7 +4,6 @@ package com.wts.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wts.api.service.AccountService;
-import com.wts.entity.User;
 import com.wts.infra.KiwoomAdapterClient;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -17,8 +16,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
-
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/account")

@@ -1,8 +1,11 @@
 package com.wts.api;
 
+import com.wts.api.dto.DashboardSummaryDto;
+import com.wts.api.dto.StockDetailDto;
+import com.wts.api.dto.TradeHistoryDto;
 import com.wts.model.*;
-import com.wts.service.DashboardService;
-import com.wts.service.TradeHistoryService;
+import com.wts.api.service.DashboardService;
+import com.wts.api.service.TradeHistoryService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

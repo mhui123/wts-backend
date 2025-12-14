@@ -1,8 +1,8 @@
 package com.wts.auth.security;
 
 import com.wts.auth.JwtUtil;
-import com.wts.entity.User;
-import com.wts.repository.UserRepository;
+import com.wts.api.entity.User;
+import com.wts.api.repository.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;

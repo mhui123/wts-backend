@@ -2,8 +2,7 @@ package com.wts.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.security.core.Authentication;
-import com.wts.entity.User;
-import com.wts.repository.UserRepository;
+import com.wts.api.entity.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;

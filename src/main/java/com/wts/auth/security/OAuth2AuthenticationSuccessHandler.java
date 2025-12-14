@@ -2,8 +2,8 @@ package com.wts.auth.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wts.auth.JwtUtil;
-import com.wts.entity.User;
-import com.wts.repository.UserRepository;
+import com.wts.api.entity.User;
+import com.wts.api.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

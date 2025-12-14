@@ -1,7 +1,7 @@
 package com.wts.auth.security;
 
-import com.wts.entity.User;
-import com.wts.repository.UserRepository;
+import com.wts.api.entity.User;
+import com.wts.api.repository.UserRepository;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
 import org.springframework.security.oauth2.core.user.OAuth2User;

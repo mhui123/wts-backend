@@ -13,7 +13,7 @@ import com.wts.auth.JwtUtil;
 import com.wts.auth.security.CustomOAuth2UserService;
 import com.wts.auth.security.OAuth2AuthenticationSuccessHandler;
 import com.wts.auth.security.JwtAuthenticationFilter;
-import com.wts.repository.UserRepository;
+import com.wts.api.repository.UserRepository;
 
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;

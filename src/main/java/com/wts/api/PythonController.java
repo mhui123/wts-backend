@@ -1,8 +1,10 @@
 package com.wts.api;
 
+import com.wts.api.dto.StockPriceResponseDto;
+import com.wts.api.dto.TradeHistoryUploadDto;
 import com.wts.model.*;
-import com.wts.service.DashboardService;
-import com.wts.service.PythonServerService;
+import com.wts.api.service.DashboardService;
+import com.wts.api.service.PythonServerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
