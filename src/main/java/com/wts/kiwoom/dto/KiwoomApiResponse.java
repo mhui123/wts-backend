@@ -1,4 +1,4 @@
-package com.wts.auth.dto;
+package com.wts.kiwoom.dto;
 
 import lombok.Getter;
 import lombok.Setter;

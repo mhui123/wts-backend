@@ -1,5 +1,8 @@
-package com.wts.auth;
+package com.wts.kiwoom;
 
+import com.wts.auth.dto.JwtResponse;
+import com.wts.kiwoom.dto.KiwoomTokenRequest;
+import com.wts.kiwoom.service.KiwoomAuthService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,8 +12,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import jakarta.validation.constraints.NotBlank;
 
 /**
  * Kiwoom 인증 컨트롤러 (프루빙 방식)
@@ -41,30 +42,5 @@ public class KiwoomAuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Kiwoom token invalid");
         }
         return ResponseEntity.ok(new JwtResponse(jwt));
-    }
-
-    public static class KiwoomTokenRequest {
-        @NotBlank
-        private String kiwoomToken;
-
-        public String getKiwoomToken() {
-            return kiwoomToken;
-        }
-
-        public void setKiwoomToken(String kiwoomToken) {
-            this.kiwoomToken = kiwoomToken;
-        }
-    }
-
-    public static class JwtResponse {
-        private final String token;
-
-        public JwtResponse(String token) {
-            this.token = token;
-        }
-
-        public String getToken() {
-            return token;
-        }
     }
 }
