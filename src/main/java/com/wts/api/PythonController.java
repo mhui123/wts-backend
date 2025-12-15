@@ -21,9 +21,6 @@ public class PythonController {
     private final PythonServerService pythonServerService;
     private final DashboardService dService;
 
-    // ...existing executeTask method...
-    // ...existing checkPythonServerHealth method...
-
     /**
      * Python 서버에서 티커 정보 조회
      */

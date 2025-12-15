@@ -4,6 +4,9 @@ import com.wts.api.dto.PythonRequestDto;
 import com.wts.api.dto.PythonResponseDto;
 import com.wts.api.dto.StockPriceResponseDto;
 import com.wts.api.dto.TradeHistoryUploadDto;
+import com.wts.kiwoom.dto.KeyDto;
+import com.wts.kiwoom.dto.KiwoomApiRequest;
+import com.wts.kiwoom.repository.KiwoomApiKeyRepository;
 import com.wts.model.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,12 +31,12 @@ public class PythonServerService {
     @Value("${external.python-server.timeout:30}")
     private int timeoutSeconds;
 
-    public PythonResponseDto executeTask(String uri, PythonRequestDto request) {
+    public PythonResponseDto executePostTask(String uri, Map<String, Object> params) {
         try {
             return pythonWebClient.post()
                     .uri(uri)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(request)
+                    .bodyValue(params)
                     .retrieve()
                     .bodyToMono(PythonResponseDto.class)
                     .timeout(Duration.ofSeconds(timeoutSeconds))
@@ -42,6 +45,22 @@ public class PythonServerService {
                     .block();
         } catch (Exception e) {
             log.error("Python 서버 executeTask 오류: ", e);
+            return createErrorResponse("작업 실행 실패: " + e.getMessage());
+        }
+    }
+
+    public PythonResponseDto executeGetTask(String uri) {
+        try {
+            return pythonWebClient.get()
+                    .uri(uri)
+                    .retrieve()
+                    .bodyToMono(PythonResponseDto.class)
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
+                    .doOnError(error -> log.error("Python 서버 호출 실패: ", error))
+                    .onErrorReturn(createErrorResponse("서버 통신 오류"))
+                    .block();
+        } catch (Exception e) {
+            log.error("Python 서버 executeGetTask 오류: ", e);
             return createErrorResponse("작업 실행 실패: " + e.getMessage());
         }
     }
@@ -169,6 +188,70 @@ public class PythonServerService {
         } catch (Exception e) {
             log.error("Python 서버 주가 조회 오류: ", e);
             return new StockPriceResponseDto();  // 에러 시 빈 객체 반환
+        }
+    }
+
+    public ProcessResult kiwoomLogin(KeyDto dto) {
+        String uri = "/kiwoom/login";
+        try {
+            String appKey = dto.getAppKey();
+            String appSec = dto.getAppSecret();
+            // JSON 페이로드 구성
+            Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("appKey", appKey);
+            payload.put("secret", appSec);
+
+            PythonResponseDto response = executePostTask(uri, payload);
+
+            if (response != null && response.isSuccess() && response.getData() != null) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> dataMap = (Map<String, Object>) response.getData();
+                String token = (String) dataMap.get("token");
+                //키움 api요청은 이 토큰을 요청에 담아야만 권한이 있다.
+                return ProcessResult.builder()
+                        .success(true)
+                        .message(dataMap.get("return_msg").toString())
+                        .data(token)
+                        .build();
+            } else {
+                assert response != null;
+                return createErrorProcess("로그인 실패: " + response.getMessage());
+            }
+        } catch (Exception e) {
+            log.error("Python 서버 kiwoomLogin 오류: ", e);
+            return createErrorProcess("거래내역 업로드 실패: " + e.getMessage());
+        }
+    }
+
+    public ProcessResult kiwoomLogout(KeyDto dto) {
+        String uri = "/kiwoom/logout";
+        try {
+            String appKey = dto.getAppKey();
+            String appSec = dto.getAppSecret();
+            String token = dto.getToken();
+            // JSON 페이로드 구성
+            Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("appKey", appKey);
+            payload.put("secret", appSec);
+            payload.put("token", token);
+
+            PythonResponseDto response = executePostTask(uri, payload);
+
+            if (response != null && response.isSuccess() && response.getData() != null) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> dataMap = (Map<String, Object>) response.getData();
+
+                return ProcessResult.builder()
+                        .success(true)
+                        .message(dataMap.get("return_msg").toString())
+                        .data(response.getData())
+                        .build();
+            } else {
+                return createErrorProcess("로그아웃 실패: " + (response != null ? response.getMessage() : "알 수 없는 오류"));
+            }
+        } catch (Exception e) {
+            log.error("Python 서버 로그아웃 오류: ", e);
+            return createErrorProcess("로그아웃 실패: " + e.getMessage());
         }
     }
 }

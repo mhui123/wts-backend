@@ -11,6 +11,11 @@ quotes:
   codes: ""  # 예: 005930,000660
 
 spring:
+  application:
+    name: wts-backend
+  config:
+    activate:
+      on-profile: dev
   main:
     banner-mode: console
   datasource:
@@ -35,6 +40,8 @@ spring:
     console:
       enabled: true
       path: /h2-console
+
+
 
   # --- Google OAuth2 client 등록 샘플 ---
   # 실제로는 Google Cloud Console에서 OAuth 2.0 클라이언트 ID를 생성하고
@@ -67,8 +74,12 @@ logging:
 
 # Kiwoom REST API 프루빙 설정
 kiwoom:
+  encryption:
+    secret: ${KIWOOM_ENCRYPTION_SECRET:PLEASE-SET-ENVIRONMENT-VARIABLE}
+    salt: ${KIWOOM_ENCRYPTION_SALT:PLEASE-SET-ENVIRONMENT-VARIABLE}
   base.dev-url: https://mockapi.kiwoom.com
   base.url: https://api.kiwoom.com
+  timeout: 30000
   probe:
     path: /api/dostk/acnt  # 부작용 없는 엔드포인트로 교체 가능
 
