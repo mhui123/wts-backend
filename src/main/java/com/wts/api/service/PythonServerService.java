@@ -1,16 +1,16 @@
 package com.wts.api.service;
 
-import com.wts.api.dto.PythonRequestDto;
 import com.wts.api.dto.PythonResponseDto;
 import com.wts.api.dto.StockPriceResponseDto;
 import com.wts.api.dto.TradeHistoryUploadDto;
+import com.wts.auth.JwtUtil;
 import com.wts.kiwoom.dto.KeyDto;
-import com.wts.kiwoom.dto.KiwoomApiRequest;
-import com.wts.kiwoom.repository.KiwoomApiKeyRepository;
 import com.wts.model.*;
+import com.wts.util.MapCaster;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.BodyInserters;
@@ -27,6 +27,8 @@ public class PythonServerService {
 
     private final WebClient pythonWebClient;
     private final TradeHistoryService tService;
+    private final JwtUtil jwtUtil;
+    private final MapCaster caster;
 
     @Value("${external.python-server.timeout:30}")
     private int timeoutSeconds;
@@ -115,8 +117,7 @@ public class PythonServerService {
                     .onErrorReturn(createErrorResponse("티커 조회 서버 통신 오류"))
                     .block();
             if (response != null && response.isSuccess() && response.getData() != null) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> dataMap = (Map<String, Object>) response.getData();
+                Map<String, Object> dataMap = caster.safeMapCast(response.getData());
                 String ticker = (String) dataMap.get("ticker");
                 return ProcessResult.builder()
                         .success(true)
@@ -150,8 +151,7 @@ public class PythonServerService {
 
             if (response != null && response.isSuccess() && response.getData() != null) {
                 // data를 Map으로 캐스팅
-                @SuppressWarnings("unchecked")
-                Map<String, Object> dataMap = (Map<String, Object>) response.getData();
+                Map<String, Object> dataMap = caster.safeMapCast(response.getData());
                 String jsonData = (String) dataMap.get("json_data");
 
                 if (jsonData != null) {
@@ -204,14 +204,14 @@ public class PythonServerService {
             PythonResponseDto response = executePostTask(uri, payload);
 
             if (response != null && response.isSuccess() && response.getData() != null) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> dataMap = (Map<String, Object>) response.getData();
-                String token = (String) dataMap.get("token");
+                Map<String, Object> dataMap = caster.safeMapCast(response.getData());
+                String token = caster.safeMapGetString(dataMap, "token");
+
                 //키움 api요청은 이 토큰을 요청에 담아야만 권한이 있다.
                 return ProcessResult.builder()
                         .success(true)
                         .message(dataMap.get("return_msg").toString())
-                        .data(token)
+                        .data(response.getData())
                         .build();
             } else {
                 assert response != null;
@@ -238,8 +238,7 @@ public class PythonServerService {
             PythonResponseDto response = executePostTask(uri, payload);
 
             if (response != null && response.isSuccess() && response.getData() != null) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> dataMap = (Map<String, Object>) response.getData();
+                Map<String, Object> dataMap = caster.safeMapCast(response.getData());
 
                 return ProcessResult.builder()
                         .success(true)
@@ -253,5 +252,62 @@ public class PythonServerService {
             log.error("Python 서버 로그아웃 오류: ", e);
             return createErrorProcess("로그아웃 실패: " + e.getMessage());
         }
+    }
+
+    public String verifyKiwoomTokenAndCreateJwt(String kiwoomToken) {
+        try {
+            if (kiwoomToken == null || kiwoomToken.isBlank()) {
+                log.warn("verifyKiwoomTokenAndCreateJwt called with blank token");
+                return null;
+            }
+
+            // kiwoomAPI로부터 계좌상세정보를 불러올 수 있으면 유효한 토큰으로 간주한다.
+            String uri = "/kiwoom/getBalanceDetail";
+            PythonResponseDto dto = executePostTask(uri, Map.of("token", kiwoomToken));
+
+            if (dto == null) {
+                log.warn("Kiwoom probe response is null");
+                return null;
+            }
+
+            if(dto.getData() != null) {
+                Map<String, Object> data = caster.safeMapCast(dto.getData());
+                if (data != null && data.containsKey("return_code")) {
+                    try {
+                        Integer code = Integer.parseInt(data.get("return_code").toString());
+                        if (isSuccess(code)) {
+                            String subject = "kiwoom-user";
+                            String jwt = jwtUtil.createToken(subject);
+                            log.info("Kiwoom token validated via probe. Issued internal JWT for sub={}", subject);
+                            return jwt;
+                        }
+                    } catch (NumberFormatException e) {
+                        log.warn("Invalid return_code format: {}", data.get("return_code"));
+                    }
+                } else {
+                    log.warn("Response data is not a valid Map or missing return_code");
+                }
+            }
+
+            return null;
+        } catch (WebClientResponseException e) {
+            HttpStatusCode status = e.getStatusCode();
+            int http = status.value();
+            if (http == 401 || http == 403) {
+                log.info("Kiwoom token invalid by HTTP status {}", http);
+                return null;
+            }
+            log.warn("Kiwoom probe HTTP error: {} - {}", http, e.getMessage());
+            return null;
+        } catch (Exception e) {
+            log.warn("Kiwoom probe failed: {}", e.toString());
+            return null;
+        }
+    }
+
+    private boolean isSuccess(Integer returnCode) {
+        if (returnCode == null) return false;
+        // 기본 성공 코드는 "0"으로 가정. 필요 시 환경설정으로 치환 가능
+        return 0 == returnCode;
     }
 }
