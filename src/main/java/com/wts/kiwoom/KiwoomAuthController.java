@@ -5,7 +5,9 @@ import com.wts.auth.dto.JwtResponse;
 import com.wts.kiwoom.dto.KiwoomApiRequest;
 import com.wts.kiwoom.dto.KiwoomTokenRequest;
 import com.wts.kiwoom.service.KiwoomPublicService;
+import com.wts.kiwoom.service.KiwoomTokenManager;
 import com.wts.model.ProcessResult;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -37,6 +39,7 @@ public class KiwoomAuthController {
         if (jwt == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Kiwoom token invalid");
         }
+
         return ResponseEntity.ok(new JwtResponse(jwt));
     }
 
@@ -49,11 +52,9 @@ public class KiwoomAuthController {
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("키움 로그인 실패: ", e);
-            ProcessResult errorResponse = ProcessResult.builder()
-                    .success(false)
-                    .message("키움 로그인 실패: " + e.getMessage())
-                    .build();
+            String msg = String.format("키움 로그인 실패: %s", e);
+            log.error(msg);
+            ProcessResult errorResponse = ProcessResult.failure(msg);
             return ResponseEntity.internalServerError().body(errorResponse);
         }
     }
@@ -68,27 +69,39 @@ public class KiwoomAuthController {
             ProcessResult response = kiwoomPublicService.writeKiwoomKey(userId, appKey, appSecret);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("키움 키저장 실패: ", e);
-            ProcessResult errorResponse = ProcessResult.builder()
-                    .success(false)
-                    .message("키움 키저장 실패: " + e.getMessage())
-                    .build();
+            String msg = String.format("키움 키저장 실패: %s", e);
+            log.error(msg);
+            ProcessResult errorResponse = ProcessResult.failure(msg);
             return ResponseEntity.internalServerError().body(errorResponse);
         }
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<ProcessResult> kiwoomLogout(@RequestBody KiwoomApiRequest req) {
-        Long userId = req.getUserId();
+    public ResponseEntity<ProcessResult> kiwoomLogout(HttpServletRequest request, @RequestBody KiwoomApiRequest req) {
+        // Authorization 헤더 추출 (대소문자 구분 없이)
+        String jwt = null;
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader == null) {
+            // 대소문자 변형 확인
+            authHeader = request.getHeader("authorization");
+        }
+
+        if (authHeader != null && authHeader.toLowerCase().startsWith("bearer ")) {
+            jwt = authHeader.substring(7).trim();
+        } else {
+            String msg = String.format("유효하지 않은 Authorization 헤더: %s", authHeader);
+            log.warn(msg);
+            ProcessResult errorResponse = ProcessResult.failure(msg);
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+
         try {
-            ProcessResult response = kiwoomPublicService.kiwoomLogout(req);
+            ProcessResult response = kiwoomPublicService.kiwoomLogout(jwt);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("키움 로그인 실패: ", e);
-            ProcessResult errorResponse = ProcessResult.builder()
-                    .success(false)
-                    .message("키움 로그인 실패: " + e.getMessage())
-                    .build();
+            String msg = String.format("키움 로그아웃 실패: %s", e);
+            log.error(msg);
+            ProcessResult errorResponse = ProcessResult.failure(msg);
             return ResponseEntity.internalServerError().body(errorResponse);
         }
     }

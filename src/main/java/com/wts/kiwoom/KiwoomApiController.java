@@ -5,6 +5,7 @@ import com.wts.kiwoom.service.KiwoomApiService;
 import com.wts.kiwoom.service.KiwoomPublicService;
 import com.wts.kiwoom.service.KiwoomAuditService;
 import com.wts.model.ProcessResult;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,7 +24,7 @@ public class KiwoomApiController {
     // 조회 권한만 있으면 호출 가능
     @PostMapping("/account/balance")
     @PreAuthorize("@kiwoomPermissionService.hasPermission(authentication.name, 'BASIC_USER')")
-    public ResponseEntity<?> getAccountBalance(@RequestBody KiwoomApiRequest req){
+    public ResponseEntity<?> getAccountBalance(HttpServletRequest request, @RequestBody KiwoomApiRequest req){
         long startTime = System.currentTimeMillis();
 
         try {

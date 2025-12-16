@@ -9,6 +9,6 @@ public class KiwoomApiRequest {
     private Long userId;
     private String appKey;
     private String appSecret;
-    private String token;
+    private String token; //키움토큰
 }
 

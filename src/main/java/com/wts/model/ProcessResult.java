@@ -25,4 +25,12 @@ public class ProcessResult {
         this.success = success;
         this.message = message;
     }
+
+    public static ProcessResult success(String message) {
+        return ProcessResult.builder().success(true).message(message).build();
+    }
+
+    public static ProcessResult failure(String message) {
+        return ProcessResult.builder().success(false).message(message).build();
+    }
 }

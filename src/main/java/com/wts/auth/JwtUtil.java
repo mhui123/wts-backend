@@ -109,4 +109,59 @@ public class JwtUtil {
         byte[] sig = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
         return base64UrlEncode(sig);
     }
+
+    /**
+     * 키움 토큰 참조 ID 포함 JWT 생성
+     * @param subject 사용자 ID (문자열)
+     * @param kiwoomTokenId 키움 토큰 참조 ID (선택사항)
+     */
+    public String createTokenWithKiwoomRef(long subject, String kiwoomTokenId) {
+        try {
+            long now = Instant.now().getEpochSecond();
+            long exp = now + (expMs / 1000L);
+
+            Map<String, Object> header = new HashMap<>();
+            header.put("alg", "HS256");
+            header.put("typ", "JWT");
+
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("sub", subject);  // 사용자 ID
+            payload.put("iat", now);
+            payload.put("exp", exp);
+
+            // 키움 토큰 참조 ID만 저장 (안전함)
+            if (kiwoomTokenId != null && !kiwoomTokenId.trim().isEmpty()) {
+                payload.put("kiwoom_ref", kiwoomTokenId);
+            }
+
+            String headerJson = objectMapper.writeValueAsString(header);
+            String payloadJson = objectMapper.writeValueAsString(payload);
+
+            String encodedHeader = base64UrlEncode(headerJson.getBytes(StandardCharsets.UTF_8));
+            String encodedPayload = base64UrlEncode(payloadJson.getBytes(StandardCharsets.UTF_8));
+
+            String signingInput = encodedHeader + "." + encodedPayload;
+            String signature = signHmacSha256(signingInput, secret);
+
+            return signingInput + "." + signature;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to create JWT", e);
+        }
+    }
+
+    /**
+     * 키움 토큰 참조 ID 추출
+     */
+    public String getKiwoomTokenRef(String token) {
+        try {
+            String[] parts = token.split("\\.");
+            if (parts.length != 3) return null;
+            String payloadJson = new String(base64UrlDecode(parts[1]), StandardCharsets.UTF_8);
+            Map<?,?> payload = objectMapper.readValue(payloadJson, Map.class);
+            Object refObj = payload.get("kiwoom_ref");
+            return refObj != null ? String.valueOf(refObj) : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
 }
