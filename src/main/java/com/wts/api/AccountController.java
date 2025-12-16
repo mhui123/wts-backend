@@ -1,12 +1,9 @@
-// 계좌 관련 REST 컨트롤러: 외부 Kiwoom 어댑터를 통해 계좌 잔액 정보를 조회하고 반환합니다.
-// 주요 책임: /api/account 경로의 엔드포인트 제공, 비동기 반환(Mono)
 package com.wts.api;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wts.api.service.AccountService;
 import com.wts.infra.KiwoomAdapterClient;
 import com.wts.kiwoom.dto.KiwoomApiRequest;
-import com.wts.kiwoom.service.KiwoomApiService;
+import com.wts.kiwoom.service.KiwoomPublicService;
 import com.wts.model.ProcessResult;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -25,8 +22,7 @@ public class AccountController {
     @Autowired
     private AccountService accountService;
     @Autowired
-    private KiwoomApiService kiwoomApiService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private KiwoomPublicService kiwoomPublicService;
 
     public AccountController(KiwoomAdapterClient adapter) {
         this.adapter = adapter;
@@ -56,7 +52,7 @@ public class AccountController {
                 response.addHeader("Set-Cookie", "JSESSIONID=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None");
 
                 //키움 토큰 폐기추가
-                ProcessResult responseDto = kiwoomApiService.kiwoomLogout(req);
+                ProcessResult responseDto = kiwoomPublicService.kiwoomLogout(req);
                 return ResponseEntity.ok("logged_out");
             } catch (Exception e) {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error: " + e.getMessage());

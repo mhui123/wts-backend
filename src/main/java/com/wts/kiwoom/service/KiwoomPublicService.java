@@ -75,10 +75,13 @@ public class KiwoomPublicService {
             KeyDto keyDto = keyService.makeKeyDto(apiKey);
             ProcessResult result = pythonService.kiwoomLogin(keyDto);
 
-            String jwt = jwtUtil.createToken(userId.toString());
             Map<String, Object> data = caster.safeMapCast(result.getData());
-            data.put("jwt", jwt);
-            result.setData(data);
+            String jwt = jwtUtil.createToken(userId.toString());
+            String kiwoomToken = caster.safeMapGetString(data, "token");
+            Map<String, String> tokenMap = Map.of(
+                    "kiwoomToken", kiwoomToken, "jwt", jwt
+            );
+            result.setData(tokenMap);
 
             return result;
         } catch (Exception e) {

@@ -4,14 +4,10 @@ import com.wts.api.service.PythonServerService;
 import com.wts.auth.dto.JwtResponse;
 import com.wts.kiwoom.dto.KiwoomApiRequest;
 import com.wts.kiwoom.dto.KiwoomTokenRequest;
-import com.wts.kiwoom.service.KiwoomApiService;
-import com.wts.kiwoom.service.KiwoomAuthService;
+import com.wts.kiwoom.service.KiwoomPublicService;
 import com.wts.model.ProcessResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -23,21 +19,21 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/kiwoom")
+@RequestMapping("/api/kiwoom/public")
 @Slf4j
 public class KiwoomAuthController {
 
-    private final KiwoomAuthService authService;
     private final PythonServerService pythonServerService;
-    private final KiwoomApiService kiwoomApiService;
+    private final KiwoomPublicService kiwoomPublicService;
 
     @PostMapping("/authenticate")
     public ResponseEntity<?> authenticateWithKiwoom(@RequestBody KiwoomTokenRequest req) {
+        log.info("/authenticate");
         if (req == null || req.getKiwoomToken() == null || req.getKiwoomToken().isBlank()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("missing token");
         }
         log.info("/auth/kiwoom probe-validate called");
-        String jwt = authService.verifyKiwoomTokenAndCreateJwt(req.getKiwoomToken());
+        String jwt = pythonServerService.verifyKiwoomTokenAndCreateJwt(req.getKiwoomToken());
         if (jwt == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Kiwoom token invalid");
         }
@@ -49,7 +45,8 @@ public class KiwoomAuthController {
         Long userId = req.getUserId();
         log.info("키움 로그인 요청: userId={}", userId);
         try {
-            ProcessResult response = kiwoomApiService.kiwoomLogin(userId);
+            ProcessResult response = kiwoomPublicService.kiwoomLogin(userId);
+
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("키움 로그인 실패: ", e);
@@ -68,7 +65,7 @@ public class KiwoomAuthController {
         String appSecret = req.getAppSecret();
 
         try {
-            ProcessResult response = kiwoomApiService.writeKiwoomKey(userId, appKey, appSecret);
+            ProcessResult response = kiwoomPublicService.writeKiwoomKey(userId, appKey, appSecret);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("키움 키저장 실패: ", e);
@@ -84,7 +81,7 @@ public class KiwoomAuthController {
     public ResponseEntity<ProcessResult> kiwoomLogout(@RequestBody KiwoomApiRequest req) {
         Long userId = req.getUserId();
         try {
-            ProcessResult response = kiwoomApiService.kiwoomLogout(req);
+            ProcessResult response = kiwoomPublicService.kiwoomLogout(req);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("키움 로그인 실패: ", e);

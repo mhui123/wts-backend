@@ -205,12 +205,12 @@ public class PythonServerService {
 
             if (response != null && response.isSuccess() && response.getData() != null) {
                 Map<String, Object> dataMap = caster.safeMapCast(response.getData());
-                String token = caster.safeMapGetString(dataMap, "token");
+                String returnMsg = caster.safeMapGetString(dataMap, "return_msg");
 
                 //키움 api요청은 이 토큰을 요청에 담아야만 권한이 있다.
                 return ProcessResult.builder()
                         .success(true)
-                        .message(dataMap.get("return_msg").toString())
+                        .message(returnMsg)
                         .data(response.getData())
                         .build();
             } else {
