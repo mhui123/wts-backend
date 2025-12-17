@@ -37,7 +37,7 @@ public class AccountController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<ProcessResult> logout(HttpServletRequest request, HttpServletResponse response, @RequestBody KiwoomApiRequest req) {
+    public ResponseEntity<ProcessResult> logout(HttpServletRequest request, HttpServletResponse response) {
         try {
             // 1) 세션 무효화
             var session = request.getSession(false);
@@ -48,26 +48,9 @@ public class AccountController {
             response.addHeader("Set-Cookie", "JWT=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None");
             response.addHeader("Set-Cookie", "JSESSIONID=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None");
 
-            // Authorization 헤더 추출 (대소문자 구분 없이)
-            String jwt = null;
-            String authHeader = request.getHeader("Authorization");
-            if (authHeader == null) {
-                // 대소문자 변형 확인
-                authHeader = request.getHeader("authorization");
-            }
 
-            if (authHeader != null && authHeader.toLowerCase().startsWith("bearer ")) {
-                jwt = authHeader.substring(7).trim();
-            } else {
-                String msg = String.format("유효하지 않은 Authorization 헤더: %s", authHeader);
-                ProcessResult errorResponse = ProcessResult.failure(msg);
+            return ResponseEntity.ok(ProcessResult.success("로그아웃 성공"));
 
-                return ResponseEntity.internalServerError().body(errorResponse);
-            }
-            //키움 토큰 폐기추가
-            ProcessResult result = kiwoomPublicService.kiwoomLogout(jwt);
-
-            return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ProcessResult.failure("Error: " + e.getMessage()));
         }

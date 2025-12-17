@@ -68,10 +68,11 @@ public class KiwoomPublicService {
 
     public ProcessResult kiwoomLogin(Long userId) {
         try {
-            log.info("키움 로그인 처리 시작: userId={}", userId);
-
-            KiwoomApiKey apiKey = keyRepo.findByUserId(userId);
-            if (apiKey == null) {
+            Optional<KiwoomApiKey> apiKeyOpt = keyRepo.findByUserId(userId);
+            KiwoomApiKey apiKey;
+            if(apiKeyOpt.isPresent()){
+                apiKey = apiKeyOpt.get();
+            } else {
                 return ProcessResult.builder()
                         .success(false)
                         .message("등록된 키움 API 키가 없습니다.")
@@ -118,9 +119,11 @@ public class KiwoomPublicService {
             String token = kiwoomToken.get();
 
             log.info("키움 로그아웃 처리 시작: userId={}", userId);
-
-            KiwoomApiKey apiKey = keyRepo.findByUserId(userId);
-            if (apiKey == null) {
+            Optional<KiwoomApiKey> apiKeyOpt = keyRepo.findByUserId(userId);
+            KiwoomApiKey apiKey;
+            if(apiKeyOpt.isPresent()){
+                apiKey = apiKeyOpt.get();
+            } else {
                 return ProcessResult.failure("등록된 키움 API 키가 없습니다.");
             }
 
@@ -134,6 +137,20 @@ public class KiwoomPublicService {
             return result;
         } catch (Exception e) {
             return ProcessResult.failure(String.format("알 수 없는 에러: %s", e.getMessage()));
+        }
+    }
+
+    public ProcessResult checkKiwoomKey(long userId) {
+        try {
+            Optional<KiwoomApiKey> apiKeyOpt = keyRepo.findByUserId(userId);
+            if (apiKeyOpt.isPresent()) {
+                return ProcessResult.success("등록된 키움 API 키가 있습니다.");
+            } else {
+                return ProcessResult.failure("등록된 키움 API 키가 없습니다.");
+            }
+        } catch (Exception e) {
+            log.error("키움 키 확인 실패: ", e);
+            return ProcessResult.failure("키움 키 확인 실패: " + e.getMessage());
         }
     }
 }

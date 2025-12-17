@@ -77,7 +77,7 @@ public class KiwoomAuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<ProcessResult> kiwoomLogout(HttpServletRequest request, @RequestBody KiwoomApiRequest req) {
+    public ResponseEntity<ProcessResult> kiwoomLogout(HttpServletRequest request) {
         // Authorization 헤더 추출 (대소문자 구분 없이)
         String jwt = null;
         String authHeader = request.getHeader("Authorization");
@@ -100,6 +100,19 @@ public class KiwoomAuthController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             String msg = String.format("키움 로그아웃 실패: %s", e);
+            log.error(msg);
+            ProcessResult errorResponse = ProcessResult.failure(msg);
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
+
+    @GetMapping("/checkApiKey")
+    public ResponseEntity<ProcessResult> checkKey(@RequestParam("userId") Long userId){
+        try {
+            ProcessResult response = kiwoomPublicService.checkKiwoomKey(userId);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            String msg = String.format("키움 키 상태 확인 실패: %s", e);
             log.error(msg);
             ProcessResult errorResponse = ProcessResult.failure(msg);
             return ResponseEntity.internalServerError().body(errorResponse);
