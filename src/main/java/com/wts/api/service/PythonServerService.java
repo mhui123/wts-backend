@@ -26,12 +26,34 @@ import java.util.Map;
 public class PythonServerService {
 
     private final WebClient pythonWebClient;
+    private final WebClient py32WebClient;
     private final TradeHistoryService tService;
     private final JwtUtil jwtUtil;
     private final MapCaster caster;
 
     @Value("${external.python-server.timeout:30}")
     private int timeoutSeconds;
+
+    public PythonResponseDto execute32PostTask(String uri, Map<String, Object> params) {
+        try {
+            if(params == null) {
+                params = Map.of();
+            }
+            return py32WebClient.post()
+                    .uri(uri)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(params)
+                    .retrieve()
+                    .bodyToMono(PythonResponseDto.class)
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
+                    .doOnError(error -> log.error("Python 서버 호출 실패: ", error))
+                    .onErrorReturn(createErrorResponse("서버 통신 오류"))
+                    .block();
+        } catch (Exception e) {
+            log.error("Python 서버 executeTask 오류: ", e);
+            return createErrorResponse("작업 실행 실패: " + e.getMessage());
+        }
+    }
 
     public PythonResponseDto executePostTask(String uri, Map<String, Object> params) {
         try {

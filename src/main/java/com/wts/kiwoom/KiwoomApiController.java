@@ -68,10 +68,11 @@ public class KiwoomApiController {
 //        // 주문 실행
 //    }
 //
-//    // 관리자만 호출 가능
-//    @PostMapping("/admin/users")
+    // 관리자만 호출 가능
+    @PostMapping("/admin/setStockCodes")
 //    @PreAuthorize("@kiwoomPermissionService.hasPermission(authentication.name, 'ADMIN_USER')")
-//    public ResponseEntity<?> manageUsers(@RequestBody AdminRequest request) {
-//        // 사용자 관리
-//    }
+    public ResponseEntity<?> syncStockCdsWithMarket(HttpServletRequest request) {
+        ProcessResult result = apiService.syncKiwoomStocks();
+        return ResponseEntity.ok().body(result);
+    }
 }
