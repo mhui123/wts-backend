@@ -7,6 +7,7 @@ import com.wts.kiwoom.dto.KiwoomTokenRequest;
 import com.wts.kiwoom.service.KiwoomPublicService;
 import com.wts.kiwoom.service.KiwoomTokenManager;
 import com.wts.model.ProcessResult;
+import com.wts.util.UtilsForRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +28,7 @@ public class KiwoomAuthController {
 
     private final PythonServerService pythonServerService;
     private final KiwoomPublicService kiwoomPublicService;
+    private final UtilsForRequest uRe;
 
     @PostMapping("/authenticate")
     public ResponseEntity<?> authenticateWithKiwoom(@RequestBody KiwoomTokenRequest req) {
@@ -78,18 +80,10 @@ public class KiwoomAuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<ProcessResult> kiwoomLogout(HttpServletRequest request) {
-        // Authorization 헤더 추출 (대소문자 구분 없이)
-        String jwt = null;
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null) {
-            // 대소문자 변형 확인
-            authHeader = request.getHeader("authorization");
-        }
-
-        if (authHeader != null && authHeader.toLowerCase().startsWith("bearer ")) {
-            jwt = authHeader.substring(7).trim();
-        } else {
-            String msg = String.format("유효하지 않은 Authorization 헤더: %s", authHeader);
+        String jwt;
+        jwt = uRe.attractJwtFromRequest(request);
+        if( jwt == null){
+            String msg = "Authorization 헤더에서 JWT를 찾을 수 없습니다.";
             log.warn(msg);
             ProcessResult errorResponse = ProcessResult.failure(msg);
             return ResponseEntity.internalServerError().body(errorResponse);

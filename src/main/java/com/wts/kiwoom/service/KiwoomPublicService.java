@@ -9,6 +9,7 @@ import com.wts.kiwoom.entity.KiwoomToken;
 import com.wts.kiwoom.repository.KiwoomApiKeyRepository;
 import com.wts.model.ProcessResult;
 import com.wts.util.MapCaster;
+import com.wts.util.UtilsForRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -29,6 +30,7 @@ public class KiwoomPublicService {
     private final MapCaster caster;
     private final KiwoomTokenManager kiwoomTokenManager;
     private final KiwoomApiService apiService;
+    private final UtilsForRequest uRe;
 
     public ProcessResult writeKiwoomKey(Long userId, String appKey, String appSecret) {
         try {
@@ -108,15 +110,7 @@ public class KiwoomPublicService {
             long userId = Long.parseLong(jwtUtil.getSubject(jwt));
             String tokenId = jwtUtil.getKiwoomTokenRef(jwt);
 
-            Optional<String> kiwoomToken = kiwoomTokenManager.getKiwoomToken(userId, tokenId);
-
-            if (kiwoomToken.isEmpty()) {
-                String msg = String.format("키움 토큰을 찾을 수 없음: userId=%d", userId);
-                log.warn(msg);
-                return ProcessResult.failure(msg);
-            }
-
-            String token = kiwoomToken.get();
+            String token = uRe.getKiwoomTokenFromJwt(jwt);
 
             log.info("키움 로그아웃 처리 시작: userId={}", userId);
             Optional<KiwoomApiKey> apiKeyOpt = keyRepo.findByUserId(userId);

@@ -213,6 +213,32 @@ public class PythonServerService {
         }
     }
 
+    public ProcessResult getStockInfo(String stockCd) {
+        String uri = "/kiwoom/stockInfo";
+        try {
+            // JSON 페이로드 구성
+            Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("stockCd", stockCd);
+
+            PythonResponseDto response = executePostTask(uri, payload);
+
+            if (response != null && response.isSuccess() && response.getData() != null) {
+                Map<String, Object> dataMap = caster.safeMapCast(response.getData());
+
+                return ProcessResult.builder()
+                        .success(true)
+                        .message("주식 정보 조회 성공")
+                        .data(dataMap)
+                        .build();
+            } else {
+                return createErrorProcess("주식 정보 조회 실패: " + (response != null ? response.getMessage() : "알 수 없는 오류"));
+            }
+        } catch (Exception e) {
+            log.error("Python 서버 getStockInfo 오류: ", e);
+            return createErrorProcess("주식 정보 조회 실패: " + e.getMessage());
+        }
+    }
+
     public ProcessResult kiwoomLogin(KeyDto dto) {
         String uri = "/kiwoom/login";
         try {
@@ -256,6 +282,33 @@ public class PythonServerService {
             payload.put("appKey", appKey);
             payload.put("secret", appSec);
             payload.put("token", token);
+
+            PythonResponseDto response = executePostTask(uri, payload);
+
+            if (response != null && response.isSuccess() && response.getData() != null) {
+                Map<String, Object> dataMap = caster.safeMapCast(response.getData());
+
+                return ProcessResult.builder()
+                        .success(true)
+                        .message(dataMap.get("return_msg").toString())
+                        .data(response.getData())
+                        .build();
+            } else {
+                return createErrorProcess("로그아웃 실패: " + (response != null ? response.getMessage() : "알 수 없는 오류"));
+            }
+        } catch (Exception e) {
+            log.error("Python 서버 로그아웃 오류: ", e);
+            return createErrorProcess("로그아웃 실패: " + e.getMessage());
+        }
+    }
+
+    public ProcessResult getStockListInfo(String stockCodes, String token) {
+        String uri = "/kiwoom/stockInfo";
+        try {
+            // JSON 페이로드 구성
+            Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("token", token);
+            payload.put("stockCodes", stockCodes);
 
             PythonResponseDto response = executePostTask(uri, payload);
 

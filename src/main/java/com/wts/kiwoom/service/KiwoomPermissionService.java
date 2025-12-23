@@ -15,7 +15,7 @@ public class KiwoomPermissionService {
     /**
      * @PreAuthorize에서 호출되는 권한 검증 메서드
      */
-    public boolean hasPermission(long userId, String requiredPermission) {
+    public boolean hasPermission(Long userId, String requiredPermission) {
         KiwoomPermission permission = permissionRepository.findByUserId(userId);
 
         if (permission == null) {

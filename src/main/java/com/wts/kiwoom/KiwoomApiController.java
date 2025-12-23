@@ -1,18 +1,20 @@
 package com.wts.kiwoom;
 
 import com.wts.kiwoom.dto.KiwoomApiRequest;
+import com.wts.kiwoom.dto.WatchListDto;
 import com.wts.kiwoom.service.KiwoomApiService;
 import com.wts.kiwoom.service.KiwoomPublicService;
 import com.wts.kiwoom.service.KiwoomAuditService;
 import com.wts.model.ProcessResult;
+import com.wts.util.UtilsForRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/kiwoom")
@@ -21,9 +23,10 @@ public class KiwoomApiController {
 
     private final KiwoomAuditService auditService;
     private final KiwoomApiService apiService;
+    private final UtilsForRequest uRe;
     // 조회 권한만 있으면 호출 가능
     @PostMapping("/account/balance")
-    @PreAuthorize("@kiwoomPermissionService.hasPermission(authentication.name, 'BASIC_USER')")
+    @PreAuthorize("@kiwoomPermissionService.hasPermission(authentication.id, 'BASIC_USER')")
     public ResponseEntity<?> getAccountBalance(HttpServletRequest request, @RequestBody KiwoomApiRequest req){
         long startTime = System.currentTimeMillis();
 
@@ -74,5 +77,132 @@ public class KiwoomApiController {
     public ResponseEntity<?> syncStockCdsWithMarket(HttpServletRequest request) {
         ProcessResult result = apiService.syncKiwoomStocks();
         return ResponseEntity.ok().body(result);
+    }
+
+
+    @GetMapping("/stocks/master")
+    public ResponseEntity<?> getAllStockCodeName(HttpServletRequest request){
+        try {
+            ProcessResult result = apiService.getAllStockCodeName();
+            return ResponseEntity.ok().body(result);
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(ProcessResult.failure("처리 중 오류가 발생했습니다."));
+        }
+    }
+
+    @GetMapping("/watchList/groups/{userId}")
+    @PreAuthorize("@kiwoomPermissionService.hasPermission(#userId, 'BASIC_USER')")
+    public ResponseEntity<?> getUserWatchListGroups(HttpServletRequest request,
+                                                    @PathVariable long userId){
+        String jwt;
+        jwt = uRe.attractJwtFromRequest(request);
+        if( jwt == null) {
+            String msg = "Authorization 헤더에서 JWT를 찾을 수 없습니다.";
+            return ResponseEntity.internalServerError().body(ProcessResult.failure(msg));
+        }
+
+        try {
+            ProcessResult result = apiService.getUserWatchList(jwt);
+            return ResponseEntity.ok().body(result);
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(ProcessResult.failure("처리 중 오류가 발생했습니다."));
+        }
+    }
+
+    @PostMapping("/watchlist/add")
+    public ResponseEntity<?> addUserWatchListItem(HttpServletRequest request,
+                                                  @RequestBody WatchListDto dto){
+        try {
+            long userId = dto.getUserId();
+            List<String> stockCodes = dto.getStockCodes();
+            String groupName = dto.getGroupName();
+
+            ProcessResult result = apiService.addUserWatchListItem(userId, stockCodes, groupName);
+            return ResponseEntity.ok().body(result);
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(ProcessResult.failure("처리 중 오류가 발생했습니다."));
+        }
+    }
+
+    // 관심종목 그룹 생성
+    @PostMapping("/users/{userId}/watchlist/groups")
+    @PreAuthorize("@kiwoomPermissionService.hasPermission(#userId, 'BASIC_USER')")
+    public ResponseEntity<?> createWatchGroup(@PathVariable String userId,
+                                              @RequestBody Map<String, String> request,
+                                              HttpServletRequest httpRequest) {
+        long startTime = System.currentTimeMillis();
+        long longUserId = Long.parseLong(userId);
+
+        try {
+
+            String groupName = request.get("groupName");
+            String description = request.get("description");
+
+            ProcessResult result = apiService.createWatchGroup(longUserId, groupName, description);
+
+            long executionTime = System.currentTimeMillis() - startTime;
+            auditService.logApiRequest(
+                    longUserId,
+                    "/api/kiwoom/users/" + userId + "/watchlist/groups",
+                    executionTime,
+                    result
+            );
+
+            return ResponseEntity.ok().body(result);
+
+        } catch (Exception e) {
+            ProcessResult result = ProcessResult.failure("관심종목 그룹 생성 실패: " + e.getMessage());
+
+            long executionTime = System.currentTimeMillis() - startTime;
+            auditService.logApiRequest(
+                    longUserId,
+                    "/api/kiwoom/users/" + userId + "/watchlist/groups",
+                    executionTime,
+                    result
+            );
+
+            return ResponseEntity.internalServerError().body("처리 중 오류가 발생했습니다.");
+        }
+    }
+
+    // 관심종목 그룹별 동기화
+    @PostMapping("/users/{userId}/watchlist/groups/{groupName}")
+    @PreAuthorize("@kiwoomPermissionService.hasPermission(#userId, 'BASIC_USER')")
+    public ResponseEntity<?> syncWatchGroup(@PathVariable String userId,
+                                            @PathVariable String groupName,
+                                            @RequestBody List<String> stockCodes,
+                                            HttpServletRequest httpRequest) {
+        long startTime = System.currentTimeMillis();
+        long longUserId = Long.parseLong(userId);
+
+        try {
+            ProcessResult result = apiService.syncUserWatchList(longUserId, groupName, stockCodes);
+
+            long executionTime = System.currentTimeMillis() - startTime;
+            auditService.logApiRequest(
+                    longUserId,
+                    "/api/kiwoom/users/" + userId + "/watchlist/groups/" + groupName,
+                    executionTime,
+                    result
+            );
+
+            return ResponseEntity.ok().body(result);
+
+        } catch (Exception e) {
+            ProcessResult result = ProcessResult.failure("관심종목 그룹 동기화 실패: " + e.getMessage());
+
+            long executionTime = System.currentTimeMillis() - startTime;
+            auditService.logApiRequest(
+                    longUserId,
+                    "/api/kiwoom/users/" + userId + "/watchlist/groups/" + groupName,
+                    executionTime,
+                    result
+            );
+
+            return ResponseEntity.internalServerError().body("처리 중 오류가 발생했습니다.");
+        }
     }
 }

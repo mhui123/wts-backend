@@ -1,5 +1,6 @@
 package com.wts.kiwoom.entity;
 
+import com.wts.kiwoom.dto.StockDto;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -44,5 +45,13 @@ public class KiwoomStock {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    public static StockDto toDto(KiwoomStock stock) {
+        return StockDto.builder()
+                .stockCd(stock.getStockCd())
+                .stockNm(stock.getStockNm())
+                .market(stock.getMarket())
+                .build();
     }
 }
