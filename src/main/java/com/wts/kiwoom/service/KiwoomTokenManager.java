@@ -27,7 +27,7 @@ public class KiwoomTokenManager {
     @Value("${kiwoom.token.secret-key:change-me-to-32-char-secret-key!!}")
     private String encryptionKey;
 
-    @Value("${kiwoom.token.ttl-minutes:30}")
+    @Value("${kiwoom.token.ttl-minutes:1440}")
     private int tokenTtlMinutes;
 
     /**
