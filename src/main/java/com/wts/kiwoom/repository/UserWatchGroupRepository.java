@@ -46,4 +46,7 @@ public interface UserWatchGroupRepository extends JpaRepository<UserWatchGroup, 
      */
     @Query("SELECT COALESCE(MAX(g.displayOrder), 0) + 1 FROM UserWatchGroup g WHERE g.userId = :userId")
     Integer findNextDisplayOrder(@Param("userId") long userId);
+
+    // 그룹명 중복 검사 (자신 제외)
+    boolean existsByUserIdAndGroupNameAndIdNot(Long userId, String groupName, Long id);
 }

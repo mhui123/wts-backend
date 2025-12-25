@@ -19,6 +19,9 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Service
 @RequiredArgsConstructor
@@ -310,7 +313,7 @@ public class PythonServerService {
             payload.put("token", token);
             payload.put("stockCodes", stockCodes);
 
-            PythonResponseDto response = executePostTask(uri, payload);
+            PythonResponseDto response = executePostTaskAsync(uri, payload);
 
             if (response != null && response.isSuccess() && response.getData() != null) {
                 Map<String, Object> dataMap = caster.safeMapCast(response.getData());
@@ -384,5 +387,36 @@ public class PythonServerService {
         if (returnCode == null) return false;
         // 기본 성공 코드는 "0"으로 가정. 필요 시 환경설정으로 치환 가능
         return 0 == returnCode;
+    }
+
+    public PythonResponseDto executePostTaskAsync(String uri, Map<String, Object> params) {
+        try {
+            CompletableFuture<PythonResponseDto> future = pythonWebClient.post()
+                    .uri(uri)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(params)
+                    .retrieve()
+                    .bodyToMono(PythonResponseDto.class)
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
+                    .doOnError(error -> log.error("Python 서버 호출 실패: ", error))
+                    .onErrorReturn(createErrorResponse("서버 통신 오류"))
+                    .toFuture();
+
+            // 확실한 동기 대기 처리
+            PythonResponseDto result = future.get(timeoutSeconds + 5, TimeUnit.SECONDS);
+            log.debug("Python 서비스 응답 완료: uri={}, success={}", uri, result.isSuccess());
+            return result;
+
+        } catch (TimeoutException e) {
+            log.error("Python 서버 응답 타임아웃: uri={}, timeout={}초", uri, timeoutSeconds, e);
+            return createErrorResponse("응답 시간 초과");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Python 서버 호출 중단: ", e);
+            return createErrorResponse("작업 중단됨");
+        } catch (Exception e) {
+            log.error("Python 서버 executeTask 오류: ", e);
+            return createErrorResponse("작업 실행 실패: " + e.getMessage());
+        }
     }
 }

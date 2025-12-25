@@ -127,59 +127,19 @@ public class KiwoomApiController {
         }
     }
 
-    // 관심종목 그룹 생성
-    @PostMapping("/users/{userId}/watchlist/groups")
-    @PreAuthorize("@kiwoomPermissionService.hasPermission(#userId, 'BASIC_USER')")
-    public ResponseEntity<?> createWatchGroup(@PathVariable String userId,
-                                              @RequestBody Map<String, String> request,
-                                              HttpServletRequest httpRequest) {
-        long startTime = System.currentTimeMillis();
-        long longUserId = Long.parseLong(userId);
-
-        try {
-
-            String groupName = request.get("groupName");
-            String description = request.get("description");
-
-            ProcessResult result = apiService.createWatchGroup(longUserId, groupName, description);
-
-            long executionTime = System.currentTimeMillis() - startTime;
-            auditService.logApiRequest(
-                    longUserId,
-                    "/api/kiwoom/users/" + userId + "/watchlist/groups",
-                    executionTime,
-                    result
-            );
-
-            return ResponseEntity.ok().body(result);
-
-        } catch (Exception e) {
-            ProcessResult result = ProcessResult.failure("관심종목 그룹 생성 실패: " + e.getMessage());
-
-            long executionTime = System.currentTimeMillis() - startTime;
-            auditService.logApiRequest(
-                    longUserId,
-                    "/api/kiwoom/users/" + userId + "/watchlist/groups",
-                    executionTime,
-                    result
-            );
-
-            return ResponseEntity.internalServerError().body("처리 중 오류가 발생했습니다.");
-        }
-    }
-
-    // 관심종목 그룹별 동기화
-    @PostMapping("/users/{userId}/watchlist/groups/{groupName}")
+    @PostMapping("/watchlist/syncgroups/{userId}")
     @PreAuthorize("@kiwoomPermissionService.hasPermission(#userId, 'BASIC_USER')")
     public ResponseEntity<?> syncWatchGroup(@PathVariable String userId,
-                                            @PathVariable String groupName,
-                                            @RequestBody List<String> stockCodes,
+                                            @RequestBody WatchListDto dto,
                                             HttpServletRequest httpRequest) {
         long startTime = System.currentTimeMillis();
+        String groupName = dto.getGroupName();
         long longUserId = Long.parseLong(userId);
+        String groupId = dto.getGroupId();
+        List<String> stockCodes = dto.getStockCodes();
 
         try {
-            ProcessResult result = apiService.syncUserWatchList(longUserId, groupName, stockCodes);
+            ProcessResult result = apiService.syncUserWatchList(longUserId, groupId, groupName, stockCodes);
 
             long executionTime = System.currentTimeMillis() - startTime;
             auditService.logApiRequest(
@@ -198,6 +158,44 @@ public class KiwoomApiController {
             auditService.logApiRequest(
                     longUserId,
                     "/api/kiwoom/users/" + userId + "/watchlist/groups/" + groupName,
+                    executionTime,
+                    result
+            );
+
+            return ResponseEntity.internalServerError().body("처리 중 오류가 발생했습니다.");
+        }
+    }
+
+    // 관심종목 그룹별 동기화
+    @DeleteMapping("/watchlist/delgroups/{userId}/{groupId}")
+    @PreAuthorize("@kiwoomPermissionService.hasPermission(#userId, 'BASIC_USER')")
+    public ResponseEntity<?> deleteWatchGroup(@PathVariable String userId,
+                                              @PathVariable String groupId,
+                                              HttpServletRequest httpRequest) {
+        long startTime = System.currentTimeMillis();
+        long longGroupId = Long.parseLong(groupId);
+        long longUserId = Long.parseLong(userId);
+
+        try {
+            ProcessResult result = apiService.deleteWatchGroup(longUserId, longGroupId);
+
+            long executionTime = System.currentTimeMillis() - startTime;
+            auditService.logApiRequest(
+                    longUserId,
+                    "/watchlist/delgroups/" + userId + "/" + groupId,
+                    executionTime,
+                    result
+            );
+
+            return ResponseEntity.ok().body(result);
+
+        } catch (Exception e) {
+            ProcessResult result = ProcessResult.failure("관심종목 그룹 삭제 실패: " + e.getMessage());
+
+            long executionTime = System.currentTimeMillis() - startTime;
+            auditService.logApiRequest(
+                    longUserId,
+                    "/watchlist/delgroups/" + userId + "/" + groupId,
                     executionTime,
                     result
             );

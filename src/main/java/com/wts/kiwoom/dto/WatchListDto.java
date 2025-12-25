@@ -8,6 +8,7 @@ import java.util.List;
 @Data
 @Builder
 public class WatchListDto {
+    private String groupId;
     private String groupName;
     private List<String> stockCodes;
     private long userId;

@@ -190,24 +190,93 @@ public class KiwoomApiService {
      * @return 처리 결과
      */
     @Transactional
-    public ProcessResult syncUserWatchList(long userId, String groupName, List<String> stockCodes) {
+    public ProcessResult syncUserWatchList(long userId, String stringGroupId, String groupName, List<String> stockCodes) {
         try {
-            // 그룹 조회 또는 생성
-            UserWatchGroup watchGroup = userWatchGroupRepository.findByUserIdAndGroupName(userId, groupName)
-                    .orElseGet(() -> {
-                        Integer nextOrder = userWatchGroupRepository.findNextDisplayOrder(userId);
-                        return UserWatchGroup.builder()
-                                .userId(userId)
-                                .groupName(groupName)
-                                .displayOrder(nextOrder)
+            UserWatchGroup watchGroup;
+            long groupId;
+            //신규생성 그룹인지 구분.
+            if(stringGroupId.startsWith("group_")){
+                // 신규 그룹 생성 모드
+                // 그룹명 중복 체크
+                if (userWatchGroupRepository.existsByUserIdAndGroupName(userId, groupName)) {
+                    return ProcessResult.builder()
+                            .success(false)
+                            .message("이미 존재하는 그룹명입니다: " + groupName)
+                            .build();
+                }
+
+                Integer nextOrder = userWatchGroupRepository.findNextDisplayOrder(userId);
+                watchGroup = UserWatchGroup.builder()
+                        .userId(userId)
+                        .groupName(groupName)
+                        .displayOrder(nextOrder)
+                        .build();
+
+                log.info("신규 그룹 생성: userId={}, groupName='{}'", userId, groupName);
+            } else {
+                groupId = Long.parseLong(stringGroupId);
+                // 기존 그룹 수정 모드
+                Optional<UserWatchGroup> existingGroupOpt = userWatchGroupRepository.findById(groupId);
+
+                if (existingGroupOpt.isPresent()) {
+                    watchGroup = existingGroupOpt.get();
+
+                    // 사용자 권한 체크
+                    if (watchGroup.getUserId() != userId) {
+                        return ProcessResult.builder()
+                                .success(false)
+                                .message("해당 그룹에 대한 권한이 없습니다.")
                                 .build();
-                    });
+                    }
+
+                    // 그룹명 변경 처리 (중복 검사)
+                    if (!watchGroup.getGroupName().equals(groupName)) {
+                        boolean groupNameExists = userWatchGroupRepository
+                                .existsByUserIdAndGroupNameAndIdNot(userId, groupName, groupId);
+
+                        if (groupNameExists) {
+                            return ProcessResult.builder()
+                                    .success(false)
+                                    .message("이미 존재하는 그룹명입니다: " + groupName)
+                                    .build();
+                        }
+
+                        // 그룹명 업데이트
+                        log.info("그룹명 변경: groupId={}, 기존명='{}', 신규명='{}'",
+                                groupId, watchGroup.getGroupName(), groupName);
+
+                        watchGroup.setGroupName(groupName);
+                    }
+                } else {
+                    return ProcessResult.builder()
+                            .success(false)
+                            .message("존재하지 않는 그룹입니다: groupId=" + groupId)
+                            .build();
+                }
+            }
 
             // 그룹 저장 (신규 생성인 경우)
             watchGroup = userWatchGroupRepository.save(watchGroup);
 
-            // 기존 아이템들 삭제
-            userWatchListItemRepository.deleteByWatchGroup(watchGroup);
+            // 기존 아이템들과 새로운 종목 코드 세트 비교
+            List<UserWatchListItem> existingItems = userWatchListItemRepository.findByWatchGroup(watchGroup);
+            Set<String> newStockCodeSet = new HashSet<>(stockCodes);
+            Set<String> existingStockCodeSet = existingItems.stream()
+                    .map(UserWatchListItem::getStockCd)
+                    .collect(Collectors.toSet());
+
+            // 삭제할 아이템들 처리 (새 목록에 없는 기존 종목들)
+            List<UserWatchListItem> itemsToDelete = existingItems.stream()
+                    .filter(item -> !newStockCodeSet.contains(item.getStockCd()))
+                    .toList();
+
+            for (UserWatchListItem item : itemsToDelete) {
+                userWatchListItemRepository.delete(item);
+            }
+
+            if (!itemsToDelete.isEmpty()) {
+                userWatchListItemRepository.flush(); // 삭제 즉시 반영
+            }
 
             int savedCount = 0;
             int displayOrder = 1;
@@ -220,21 +289,35 @@ public class KiwoomApiService {
                     continue;
                 }
 
-                // 관심종목 아이템 추가
-                UserWatchListItem watchItem = UserWatchListItem.builder()
-                        .watchGroup(watchGroup)
-                        .stockCd(stockCode)
-                        .displayOrder(displayOrder++)
-                        .build();
+                if (existingStockCodeSet.contains(stockCode)) {
+                    // 기존 아이템 업데이트 (displayOrder만 조정)
+                    Optional<UserWatchListItem> existingItem = existingItems.stream()
+                            .filter(item -> item.getStockCd().equals(stockCode))
+                            .findFirst();
 
-                userWatchListItemRepository.save(watchItem);
-                savedCount++;
+                    if (existingItem.isPresent()) {
+                        UserWatchListItem item = existingItem.get();
+                        item.setDisplayOrder(displayOrder++);
+                        userWatchListItemRepository.save(item);
+                        savedCount++;
+                    }
+                } else {
+                    // 새 아이템 추가
+                    UserWatchListItem watchItem = UserWatchListItem.builder()
+                            .watchGroup(watchGroup)
+                            .stockCd(stockCode)
+                            .displayOrder(displayOrder++)
+                            .build();
+
+                    userWatchListItemRepository.save(watchItem);
+                    savedCount++;
+                }
             }
-
+            groupId = watchGroup.getId();
             return ProcessResult.builder()
                     .success(true)
-                    .message(String.format("관심종목 동기화 완료: 그룹 '%s'에 총 %d개 저장됨", groupName, savedCount))
-                    .data(Map.of("groupName", groupName, "itemCount", savedCount))
+                    .message(String.format("관심종목 동기화 완료: 그룹 '%s'에 총 %d개 처리됨", groupName, savedCount))
+                    .data(Map.of("groupId", groupId, "groupName", groupName, "itemCount", savedCount))
                     .build();
 
         } catch (Exception e) {
@@ -264,13 +347,21 @@ public class KiwoomApiService {
                     .map(UserWatchListItem::getStockCd)
                     .collect(Collectors.toSet());
 
+            log.info("관심종목 조회 시작: userId={}, 그룹수={}, 종목수={}",
+                    userId, watchGroups.size(), allStockCodes.size());
+
             // 종목 정보 한번에 조회 (N+1 쿼리 문제 해결)
             Map<String, KiwoomStock> stockMap = stockRepo.findByStockCdIn(new ArrayList<>(allStockCodes))
                     .stream()
                     .collect(Collectors.toMap(KiwoomStock::getStockCd, Function.identity()));
+
             // 파이썬 서비스에서 가격 정보 조회
             String stockCodes = String.join("|", allStockCodes);
+            log.debug("파이썬 서비스 호출 시작: stockCodes={}", stockCodes);
+
             ProcessResult rr = pythonService.getStockListInfo(stockCodes, kiwoomToken);
+
+            log.info("파이썬 서비스 응답 완료: success={}, dataExists={}", rr.isSuccess(), rr.getData() != null);
 
             // 종목코드별 가격 정보 맵 생성
             Map<String, StockDetailInfo> priceInfoMap = new HashMap<>();
@@ -449,13 +540,13 @@ public class KiwoomApiService {
      * 관심종목 그룹 삭제
      */
     @Transactional
-    public ProcessResult deleteWatchGroup(long userId, String groupName) {
+    public ProcessResult deleteWatchGroup(long userId, long groupId) {
         try {
-            Optional<UserWatchGroup> watchGroup = userWatchGroupRepository.findByUserIdAndGroupName(userId, groupName);
+            Optional<UserWatchGroup> watchGroup = userWatchGroupRepository.findById(groupId);
             if (watchGroup.isEmpty()) {
                 return ProcessResult.builder()
                         .success(false)
-                        .message("존재하지 않는 그룹입니다: " + groupName)
+                        .message("존재하지 않는 그룹입니다: " + groupId)
                         .build();
             }
 
@@ -463,11 +554,11 @@ public class KiwoomApiService {
 
             return ProcessResult.builder()
                     .success(true)
-                    .message("관심종목 그룹이 삭제되었습니다: " + groupName)
+                    .message("관심종목 그룹이 삭제되었습니다: " + watchGroup.get().getGroupName())
                     .build();
 
         } catch (Exception e) {
-            log.error("관심종목 그룹 삭제 실패: userId={}, groupName={}", userId, groupName, e);
+            log.error("관심종목 그룹 삭제 실패: userId={}, groupId={}", userId, groupId, e);
             return ProcessResult.builder()
                     .success(false)
                     .message("관심종목 그룹 삭제 실패: " + e.getMessage())

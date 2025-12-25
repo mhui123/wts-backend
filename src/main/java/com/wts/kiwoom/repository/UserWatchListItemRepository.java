@@ -56,4 +56,6 @@ public interface UserWatchListItemRepository extends JpaRepository<UserWatchList
             "WHERE g.userId = :userId " +
             "ORDER BY g.displayOrder ASC, i.displayOrder ASC")
     List<UserWatchListItem> findAllByUserId(@Param("userId") long userId);
+
+    List<UserWatchListItem> findByWatchGroup(UserWatchGroup watchGroup);
 }
