@@ -50,6 +50,7 @@ public class StockDistribution {
                 .distributionPerShare(d.getDistributionPerShare())
                 .rocPct(d.getRocPct())
                 .declaredDate(d.getDeclaredDate())
+                .recordDate(d.getRecordDate())
                 .payableDate(d.getPayableDate())
                 .build();
     }

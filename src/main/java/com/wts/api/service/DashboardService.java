@@ -1,17 +1,13 @@
 package com.wts.api.service;
 
 import com.wts.api.dto.*;
-import com.wts.api.entity.PortfolioItem;
-import com.wts.api.entity.StockDistribution;
-import com.wts.api.entity.SymbolTicker;
-import com.wts.api.entity.TradeHistory;
-import com.wts.api.repository.PortfolioItemRepository;
-import com.wts.api.repository.StockDistributionRepository;
-import com.wts.api.repository.SymbolTickerRepository;
-import com.wts.api.repository.TradeHistoryRepository;
+import com.wts.api.entity.*;
+import com.wts.api.enums.YesNo;
+import com.wts.api.repository.*;
 import com.wts.model.*;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +20,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @Transactional(readOnly = false)
+@RequiredArgsConstructor
 public class DashboardService {
 
     @PersistenceContext
@@ -34,15 +31,7 @@ public class DashboardService {
     private final SymbolTickerRepository sRepo;
     private final PythonServerService pService;
     private final StockDistributionRepository disRepo;
-
-    public DashboardService(TradeHistoryRepository thRepository, PortfolioItemRepository portfolioItemRepository
-            , SymbolTickerRepository sRepo, PythonServerService pService, StockDistributionRepository disRepo) {
-        this.thRepository = thRepository;
-        this.pRepo = portfolioItemRepository;
-        this.sRepo = sRepo;
-        this.pService = pService;
-        this.disRepo = disRepo;
-    }
+    private final PendingFetchDividendRepository pendingRepo;
 
     public DashboardSummaryDto getDashboardData(Long userId){
         DashboardSummaryDto dto = new DashboardSummaryDto();
@@ -639,6 +628,17 @@ public class DashboardService {
         dto.setReceivedInfo(receivedInfo);
 
         List<StockDistribution> declaredInfo = disRepo.findByTicker(ticker);
+        if(declaredInfo.isEmpty()){
+            Optional<PendingFetchDividend> pendingOpt = pendingRepo.findByTicker(ticker);
+            if(pendingOpt.isEmpty()){
+                // 파이썬에서 새로 호출요청? -> 배당데이터 수요 요청. (대기 테이블에 적재 후 스케줄러가 처리하는 방식)
+                PendingFetchDividend e = PendingFetchDividend.builder()
+                        .ticker(ticker)
+                        .status(YesNo.N)
+                        .build();
+                pendingRepo.save(e);
+            }
+        }
         List<StockDistributionDto> declaredDto = declaredInfo.stream()
                 .map(StockDistribution::toDto)
                 .toList();

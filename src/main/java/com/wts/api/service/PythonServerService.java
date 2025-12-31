@@ -126,7 +126,7 @@ public class PythonServerService {
      */
     public ProcessResult getTicker(String isin) {
         try {
-            String uri = "/wpy/getTicker";
+            String uri = "/kiwoom/getTicker";
             if (isin != null && !isin.isEmpty()) {
                 uri += "?isin=" + isin;
             } else {
@@ -198,7 +198,7 @@ public class PythonServerService {
 
     public StockPriceResponseDto getStockPrice(String symbols) {
         try {
-            String uri = "/wpy/stock/prices";
+            String uri = "/kiwoom/stock/prices";
             if (symbols != null && !symbols.isEmpty()) {
                 uri += "?symbols=" + symbols;
             }
@@ -404,6 +404,22 @@ public class PythonServerService {
 
             // 확실한 동기 대기 처리
             PythonResponseDto result = future.get(timeoutSeconds + 5, TimeUnit.SECONDS);
+
+            // 데이터 유효성 검증 추가
+            boolean hasValidData = result.isSuccess() && result.getData() != null;
+            if (hasValidData && result.getData() instanceof Map) {
+                Map<String, Object> dataMap = caster.safeMapCast(result.getData());
+                // 주식 정보 조회의 경우 핵심 데이터 존재 여부 확인
+                if (uri.contains("/kiwoom/stockInfo") && dataMap != null) {
+                    boolean hasStockData = dataMap.containsKey("atn_stk_infr") && dataMap.get("atn_stk_infr") != null;
+                    if (!hasStockData) {
+                        log.warn("Python 서비스 응답 완료되었으나 주식 데이터 누락: uri={}, success={}, dataKeys={}",
+                                uri, result.isSuccess(), dataMap.keySet());
+                        // 데이터 누락 시 에러 응답으로 변환
+                        return createErrorResponse("주식 데이터 누락으로 인한 응답 불완전");
+                    }
+                }
+            }
             log.debug("Python 서비스 응답 완료: uri={}, success={}", uri, result.isSuccess());
             return result;
 

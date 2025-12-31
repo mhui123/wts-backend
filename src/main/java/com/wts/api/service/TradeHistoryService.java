@@ -26,6 +26,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -135,9 +136,31 @@ public class TradeHistoryService {
 
             for (TradeHistoryJsonDto dto : jsonDtos) {
                 try {
-                    TradeHistory tradeHistory = convertToTradeHistory(dto, user);
-                    tradeHistories.add(tradeHistory);
-                    processedCount++;
+
+                    Optional<TradeHistory> existingTrade = repository.findByUserIdAndTradeDateAndTradeTypeAndSymbolNameAndIsinAndQuantityAndAmountKrwAndBalanceKrw(
+                            userId,
+                            convertTimestampToLocalDate(dto.getTradeDate()),
+                            dto.getTradeType(),
+                            dto.getSymbolName(),
+                            dto.getIsin(),
+                            dto.getQuantity(),
+                            dto.getAmountKrw(),
+                            dto.getBalanceKrw()
+                    );
+
+                    if(existingTrade.isPresent()){
+                        log.info("중복된 거래내역 발견, 저장 건너뜀: userId={}, tradeDate={}, tradeType={}, symbolName={}, isin={}",
+                                userId,
+                                convertTimestampToLocalDate(dto.getTradeDate()),
+                                dto.getTradeType(),
+                                dto.getSymbolName(),
+                                dto.getIsin());
+                        continue; // 중복된 거래내역은 저장하지 않고 건너뜁니다.
+                    } else {
+                        TradeHistory tradeHistory = convertToTradeHistory(dto, user);
+                        tradeHistories.add(tradeHistory);
+                        processedCount++;
+                    }
                 } catch (Exception e) {
                     log.warn("거래내역 변환 실패: {}", e.getMessage());
                     // 개별 레코드 실패는 로그만 남기고 계속 진행

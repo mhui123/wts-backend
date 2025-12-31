@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface TradeHistoryRepository extends JpaRepository<TradeHistory, Long>, JpaSpecificationExecutor<TradeHistory> {
@@ -42,7 +43,18 @@ public interface TradeHistoryRepository extends JpaRepository<TradeHistory, Long
                     " and th.symbol_name = :companyName " +
                     " and th.trade_type in ( :types ) " +
                     " order by th.symbol_name, th.trade_date ", nativeQuery = true)
-    List<Object[]> getTradeHistoryBySymbolAndUserIdOrderByTradeDate(Long userId, String companyName, List<String> types);
+    List<Object[]> getTradeHistoryBySymbolAndUserIdOrderByTradeDate(@Param("userId") Long userId, @Param("companyName") String companyName, @Param("types") List<String> types);
 
     List<TradeHistory> findByUserIdAndSymbolNameAndTradeType(Long userId, String symbolName, String tradeType);
+
+    Optional<TradeHistory> findByUserIdAndTradeDateAndTradeTypeAndSymbolNameAndIsinAndQuantityAndAmountKrwAndBalanceKrw(
+            Long userId,
+            java.time.LocalDate tradeDate,
+            String tradeType,
+            String symbolName,
+            String isin,
+            java.math.BigDecimal quantity,
+            java.math.BigDecimal amountKrw,
+            java.math.BigDecimal balanceKrw
+    );
 }
