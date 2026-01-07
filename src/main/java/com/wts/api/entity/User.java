@@ -45,6 +45,27 @@ public class User {
         this.roles = "ROLE_USER";
     }
 
+    public static User createGuest(String guestId) {
+        User guest = new User();
+        guest.setProvider("guest");
+        guest.setProviderId(guestId);
+        guest.setEmail(guestId + "@guest.wts");
+        guest.setName("게스트_" + guestId.substring(6, 14)); // GUEST_ 제거 후 8자리
+        guest.setPictureUrl(null);
+        guest.setRoles("ROLE_GUEST");
+        guest.setEnabled(true);
+        return guest;
+    }
+
+    public boolean isGuest() {
+        return "guest".equals(this.provider);
+    }
+
+    public boolean isExpiredGuest() {
+        if (!isGuest()) return false;
+        return this.createdAt.isBefore(LocalDateTime.now().minusHours(24));
+    }
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

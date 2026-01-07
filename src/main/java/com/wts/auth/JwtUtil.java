@@ -1,6 +1,8 @@
 package com.wts.auth;
 
+import com.wts.api.entity.User;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Mac;
@@ -30,9 +32,16 @@ public class JwtUtil {
      * 프로덕션에서는 키 길이/관리, 알고리즘 선택, 클레임 검증 등을 강화하세요.
      */
     public String createToken(String subject) {
+        return createToken(subject, expMs);
+    }
+
+    /**
+     * 만료시간을 지정할 수 있는 JWT 토큰 생성 메서드
+     */
+    public String createToken(String subject, long expirationMs) {
         try {
             long now = Instant.now().getEpochSecond();
-            long exp = now + (expMs / 1000L);
+            long exp = now + (expirationMs / 1000L);
 
             Map<String, Object> header = new HashMap<>();
             header.put("alg", "HS256");
@@ -163,5 +172,15 @@ public class JwtUtil {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /**
+     * Authentication 객체에서 사용자 ID를 추출하는 헬퍼 메서드
+     */
+    public Long extractUserIdFromAuthentication(Authentication authentication) {
+        if (authentication != null && authentication.getPrincipal() instanceof User user) {
+            return user.getId();
+        }
+        return null;
     }
 }

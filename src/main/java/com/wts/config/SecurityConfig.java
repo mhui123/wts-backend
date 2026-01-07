@@ -68,9 +68,9 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
                         // 키움 인증 엔드포인트는 공개 (JWT 발급용)
-                        .requestMatchers("/api/kiwoom/authenticate", "/api/kiwoom/public/**").permitAll()
+                        .requestMatchers("/api/kiwoom/authenticate", "/api/kiwoom/public/**", "/api/guest/**").permitAll()
                         // 기타 공개 경로
-                        .requestMatchers("/ws/**", "/actuator/**", "/api/**", "/auth/**", "/oauth2/**", "/login/oauth2/**").permitAll()
+                        .requestMatchers("/ws/**", "/actuator/**", "/auth/**", "/oauth2/**", "/login/oauth2/**").permitAll()
                         // 키움 API는 JWT 인증 필요
                         .requestMatchers("/api/kiwoom/**").authenticated()
                         .anyRequest().authenticated()

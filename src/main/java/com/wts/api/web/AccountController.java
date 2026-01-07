@@ -1,8 +1,6 @@
-package com.wts.api;
+package com.wts.api.web;
 
 import com.wts.api.service.AccountService;
-import com.wts.infra.KiwoomAdapterClient;
-import com.wts.kiwoom.dto.KiwoomApiRequest;
 import com.wts.kiwoom.service.KiwoomPublicService;
 import com.wts.model.ProcessResult;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,17 +17,10 @@ import reactor.core.publisher.Mono;
 @RequestMapping("/api/account")
 @RequiredArgsConstructor
 public class AccountController {
-
-    private final KiwoomAdapterClient adapter;
     @Autowired
     private AccountService accountService;
     @Autowired
     private KiwoomPublicService kiwoomPublicService;
-
-    @GetMapping("/balance")
-    public Mono<ResponseEntity<String>> balance() {
-        return adapter.getBalance().map(ResponseEntity::ok);
-    }
 
     @GetMapping("/getMyInfo")
     public Mono<ResponseEntity<String>> getMyInfo(Authentication authentication) {
