@@ -11,6 +11,11 @@ java {
     sourceCompatibility = '17'
 }
 
+// Java 컴파일러에 -parameters 플래그 추가 (파라미터 이름 정보 포함)
+tasks.withType(JavaCompile) {
+    options.compilerArgs << '-parameters'
+}
+
 repositories {
     mavenCentral()
 }
@@ -55,3 +60,54 @@ dependencies {
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
 }
+
+// 테스트 설정 추가
+test {
+    useJUnitPlatform()
+
+    // 테스트 실행 시 자세한 로그 출력
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+        showStandardStreams = true
+    }
+
+    // 테스트 실패 시에도 리포트 생성
+    ignoreFailures = false
+
+    // 메모리 설정
+    minHeapSize = "128m"
+    maxHeapSize = "512m"
+}
+
+// 코드 품질 검사 플러그인 추가
+apply plugin: 'checkstyle'
+apply plugin: 'pmd'
+
+checkstyle {
+    toolVersion = '10.12.4'
+    configFile = file('config/checkstyle/checkstyle.xml')
+}
+
+pmd {
+    toolVersion = '6.55.0'
+    ruleSetFiles = files('config/pmd/pmd-rules.xml')
+}
+
+// 테스트 커버리지 (JaCoCo)
+apply plugin: 'jacoco'
+
+jacoco {
+    toolVersion = "0.8.8"
+}
+
+jacocoTestReport {
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+// 빌드 시 자동 테스트 실행
+build.dependsOn test
+check.dependsOn jacocoTestReport

@@ -71,6 +71,8 @@ logging:
   level:
     root: INFO
     org.springframework.web: INFO
+    org.springframework.security: DEBUG
+    com.wts.auth.security.JwtAuthenticationFilter: DEBUG
 
 # Kiwoom REST API 프루빙 설정
 kiwoom:
