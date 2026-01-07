@@ -1,6 +1,8 @@
 package com.wts.kiwoom;
 
+import com.wts.api.entity.User;
 import com.wts.api.service.PythonServerService;
+import com.wts.auth.JwtUtil;
 import com.wts.auth.dto.JwtResponse;
 import com.wts.kiwoom.dto.KiwoomApiRequest;
 import com.wts.kiwoom.dto.KiwoomTokenRequest;
@@ -13,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -29,6 +32,7 @@ public class KiwoomAuthController {
     private final PythonServerService pythonServerService;
     private final KiwoomPublicService kiwoomPublicService;
     private final UtilsForRequest uRe;
+    private final JwtUtil jwtUtil;
 
     @PostMapping("/authenticate")
     public ResponseEntity<?> authenticateWithKiwoom(@RequestBody KiwoomTokenRequest req) {
@@ -46,8 +50,8 @@ public class KiwoomAuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<ProcessResult> kiwoomLogin(@RequestBody KiwoomApiRequest req) {
-        Long userId = req.getUserId();
+    public ResponseEntity<ProcessResult> kiwoomLogin(@RequestBody KiwoomApiRequest req, Authentication authentication) {
+        Long userId = jwtUtil.extractUserIdFromAuthentication(authentication);
         log.info("키움 로그인 요청: userId={}", userId);
         try {
             ProcessResult response = kiwoomPublicService.kiwoomLogin(userId);
@@ -62,13 +66,14 @@ public class KiwoomAuthController {
     }
 
     @PostMapping("/writeKey")
-    public ResponseEntity<ProcessResult> writeKey(@RequestBody KiwoomApiRequest req) {
-        Long userId = req.getUserId();
+    public ResponseEntity<ProcessResult> writeKey(@RequestBody KiwoomApiRequest req, Authentication authentication) {
+        Long userId = jwtUtil.extractUserIdFromAuthentication(authentication);
         String appKey = req.getAppKey();
         String appSecret = req.getAppSecret();
 
         try {
-            ProcessResult response = kiwoomPublicService.writeKiwoomKey(userId, appKey, appSecret);
+            //바로 db에 저장하고있음. 키움api에서 먼저 검증 후 저장하도록 변경.
+            ProcessResult response = kiwoomPublicService.saveKiwoomKey(userId, appKey, appSecret);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             String msg = String.format("키움 키저장 실패: %s", e);
@@ -101,8 +106,12 @@ public class KiwoomAuthController {
     }
 
     @GetMapping("/checkApiKey")
-    public ResponseEntity<ProcessResult> checkKey(@RequestParam("userId") Long userId){
+    public ResponseEntity<ProcessResult> checkKey(Authentication authentication) {
         try {
+            Long userId = jwtUtil.extractUserIdFromAuthentication(authentication);
+            if (userId == null) {
+                return ResponseEntity.badRequest().build();
+            }
             ProcessResult response = kiwoomPublicService.checkKiwoomKey(userId);
             return ResponseEntity.ok(response);
         } catch (Exception e) {

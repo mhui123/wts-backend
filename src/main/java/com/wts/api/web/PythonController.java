@@ -1,7 +1,8 @@
-package com.wts.api;
+package com.wts.api.web;
 
 import com.wts.api.dto.StockPriceResponseDto;
 import com.wts.api.dto.TradeHistoryUploadDto;
+import com.wts.auth.JwtUtil;
 import com.wts.model.*;
 import com.wts.api.service.DashboardService;
 import com.wts.api.service.PythonServerService;
@@ -9,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,6 +22,7 @@ public class PythonController {
 
     private final PythonServerService pythonServerService;
     private final DashboardService dService;
+    private final JwtUtil jwtUtil;
 
     /**
      * Python 서버에서 티커 정보 조회
@@ -63,21 +66,24 @@ public class PythonController {
     @PostMapping(value = "/uploadTradeHistory", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ProcessResult> uploadTradeHistory(
             @RequestPart("file") MultipartFile file,
-            @RequestParam("userId") String userId) {
-
-        log.info("거래내역 업로드 요청: userId={}, filename={}", userId, file.getOriginalFilename());
+            Authentication authentication) {
 
         try {
             // DTO 생성
+            Long userId = jwtUtil.extractUserIdFromAuthentication(authentication);
+            if (userId == null) {
+                return ResponseEntity.badRequest().build();
+            }
+            log.info("거래내역 업로드 요청: userId={}, filename={}", userId, file.getOriginalFilename());
             TradeHistoryUploadDto uploadDto = TradeHistoryUploadDto.builder()
-                    .userId(userId)
+                    .userId(String.valueOf(userId))
                     .file(file)
                     .build();
 
             // Python 서버에서 JSON 데이터 받아오기
             ProcessResult response = pythonServerService.uploadTradeHistory(uploadDto);
             if(response.isSuccess()){
-                dService.setDataToPortfolioItem(Long.parseLong(userId)); //portfolioItem 최신화
+                dService.setDataToPortfolioItem(userId); //portfolioItem 최신화
             }
 
             return ResponseEntity.ok(response);

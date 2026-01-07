@@ -10,6 +10,7 @@ import com.wts.kiwoom.repository.KiwoomApiKeyRepository;
 import com.wts.model.ProcessResult;
 import com.wts.util.MapCaster;
 import com.wts.util.UtilsForRequest;
+import jakarta.validation.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -32,7 +33,50 @@ public class KiwoomPublicService {
     private final KiwoomApiService apiService;
     private final UtilsForRequest uRe;
 
-    public ProcessResult writeKiwoomKey(Long userId, String appKey, String appSecret) {
+    public ProcessResult saveKiwoomKey(Long userId, String appKey, String appSecret) {
+        try {
+
+            if(validateApiKey(appKey, appSecret, userId)){
+                boolean result = writeKiwoomKey(userId, appKey, appSecret);
+
+                if(result){
+                    return ProcessResult.builder()
+                            .success(true)
+                            .message("Kiwoom API Key 저장 성공")
+                            .build();
+                } else {
+                    return ProcessResult.builder()
+                            .success(false)
+                            .message("Kiwoom API Key 저장 실패")
+                            .build();
+                }
+            } else {
+                log.error("키움 키 저장 실패 : ", new ValidationException("Invalid Kiwoom API Key"));
+                return ProcessResult.builder()
+                        .success(false)
+                        .message("키움 키 저장 실패 - 무효한 데이터 입력.")
+                        .build();
+            }
+
+        }
+        catch (DataIntegrityViolationException e) {
+            log.error("키움 키 저장 실패 : ", e);
+            return ProcessResult.builder()
+                    .success(false)
+                    .message("키움 키 저장 실패 - 무효한 데이터 입력.")
+                    .build();
+        }
+        catch (Exception e) {
+            log.error("키움 키 저장 실패: ", e);
+            return ProcessResult.builder()
+                    .success(false)
+                    .message("키움 키 저장 실패: " + e.getMessage())
+                    .build();
+        }
+    }
+
+
+    public boolean writeKiwoomKey(Long userId, String appKey, String appSecret) {
         try {
             log.info("키움 키 저장 처리 시작: userId={}", userId);
 
@@ -47,24 +91,15 @@ public class KiwoomPublicService {
 
             keyRepo.save(apiKey);
 
-            return ProcessResult.builder()
-                    .success(true)
-                    .message("Kiwoom API Key 저장 성공")
-                    .build();
+            return true;
         }
         catch (DataIntegrityViolationException e) {
-            log.error("키움 키 저장 실패 - 중복된 사용자 ID: ", e);
-            return ProcessResult.builder()
-                    .success(false)
-                    .message("키움 키 저장 실패 - 중복된 사용자 ID입니다.")
-                    .build();
+            log.error("키움 키 저장 실패 : ", e);
+            return false;
         }
         catch (Exception e) {
             log.error("키움 키 저장 실패: ", e);
-            return ProcessResult.builder()
-                    .success(false)
-                    .message("키움 키 저장 실패: " + e.getMessage())
-                    .build();
+            return false;
         }
     }
 
@@ -145,6 +180,23 @@ public class KiwoomPublicService {
         } catch (Exception e) {
             log.error("키움 키 확인 실패: ", e);
             return ProcessResult.failure("키움 키 확인 실패: " + e.getMessage());
+        }
+    }
+
+    public boolean validateApiKey(String appKey, String appSecret, long userId) {
+        try {
+            KeyDto keyDto = KeyDto.builder()
+                    .appKey(appKey)
+                    .appSecret(appSecret)
+                    .userId(userId)
+                    .build();
+            ProcessResult result = pythonService.kiwoomLogin(keyDto);
+            //키움api의 접근권한획득에 성공하면 키가 유효하다고 판단한다.
+
+            return result.isSuccess();
+        } catch (Exception e) {
+            log.error("키움 API 키 유효성 검사 실패: ", e);
+            return false;
         }
     }
 }
