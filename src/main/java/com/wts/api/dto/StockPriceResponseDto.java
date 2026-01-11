@@ -14,7 +14,7 @@ import java.util.Map;
 public class StockPriceResponseDto {
 
     @JsonAnySetter
-    private Map<String, StockInfo> stocks = new HashMap<>();
+    private Map<String, StockInfo> stocks;
 
     public void setStock(String symbol, StockInfo stockInfo) {
         stocks.put(symbol, stockInfo);

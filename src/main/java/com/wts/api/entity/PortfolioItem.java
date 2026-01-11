@@ -34,7 +34,7 @@ public class PortfolioItem {
 
     // quantity
     @Column(name = "quantity", precision = 20, scale = 6)
-    private BigDecimal quantity = BigDecimal.ZERO;
+    private BigDecimal quantity;
 
     @Column(name = "avg_price_usd", precision = 19, scale = 4)
     private BigDecimal avgPriceUsd;
@@ -46,9 +46,9 @@ public class PortfolioItem {
     private BigDecimal currentPriceKrw;
 
     @Column(name = "buy_qty", precision = 20, scale = 6)
-    private BigDecimal buyQty = BigDecimal.ZERO;
+    private BigDecimal buyQty;
     @Column(name = "sell_qty", precision = 20, scale = 6)
-    private BigDecimal sellQty = BigDecimal.ZERO;
+    private BigDecimal sellQty;
     @Column(name = "avg_sell_price_usd", precision = 19, scale = 4)
     private BigDecimal avgSellPriceUsd;
     @Column(name = "avg_sell_price_krw", precision = 19, scale = 4)

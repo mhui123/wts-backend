@@ -31,7 +31,7 @@ public class KiwoomApiKey {
     private String encryptedSecretKey;
 
     @Column(name = "is_active")
-    private Boolean isActive = true;
+    private Boolean isActive;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

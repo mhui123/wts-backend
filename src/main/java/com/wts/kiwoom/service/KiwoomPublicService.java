@@ -54,7 +54,7 @@ public class KiwoomPublicService {
                 log.error("키움 키 저장 실패 : ", new ValidationException("Invalid Kiwoom API Key"));
                 return ProcessResult.builder()
                         .success(false)
-                        .message("키움 키 저장 실패 - 무효한 데이터 입력.")
+                        .message("키움 키 저장 실패 - key 인증에 실패하였습니다.")
                         .build();
             }
 

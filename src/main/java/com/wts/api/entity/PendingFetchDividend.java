@@ -30,7 +30,7 @@ public class PendingFetchDividend {
     private LocalDateTime createdAt;
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 1, nullable = false)
-    private YesNo status = YesNo.N;
+    private YesNo status;
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
