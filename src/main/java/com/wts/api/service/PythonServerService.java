@@ -5,6 +5,7 @@ import com.wts.api.dto.StockPriceResponseDto;
 import com.wts.api.dto.TradeHistoryUploadDto;
 import com.wts.auth.JwtUtil;
 import com.wts.kiwoom.dto.KeyDto;
+import com.wts.kiwoom.dto.WatchListDto;
 import com.wts.model.*;
 import com.wts.util.MapCaster;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -324,12 +326,35 @@ public class PythonServerService {
                         .data(response.getData())
                         .build();
             } else {
-                return createErrorProcess("로그아웃 실패: " + (response != null ? response.getMessage() : "알 수 없는 오류"));
+                return createErrorProcess("그룹별 관심종목 조회 실패: " + (response != null ? response.getMessage() : "알 수 없는 오류"));
             }
         } catch (Exception e) {
-            log.error("Python 서버 로그아웃 오류: ", e);
-            return createErrorProcess("로그아웃 실패: " + e.getMessage());
+            log.error("Python 서버 그룹별 관심종목 조회 오류: ", e);
+            return createErrorProcess("그룹별 관심종목 조회 실패: " + e.getMessage());
         }
+    }
+
+    public ProcessResult subscribeRealtimeData(String uri, WatchListDto dto, String kiwoomToken){
+        long userId = dto.getUserId();
+        List<String> stockCodes = dto.getStockCodes();
+        Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("token", kiwoomToken);
+        payload.put("stockCodes", stockCodes);
+        payload.put("userId", userId);
+        PythonResponseDto response = executePostTask(uri, payload);
+
+        if (response != null && response.isSuccess() && response.getData() != null) {
+            Map<String, Object> dataMap = caster.safeMapCast(response.getData());
+
+            return ProcessResult.builder()
+                    .success(true)
+                    .message(dataMap.get("return_msg").toString())
+                    .data(response.getData())
+                    .build();
+        } else {
+            return createErrorProcess("구독신청 실패: " + (response != null ? response.getMessage() : "알 수 없는 오류"));
+        }
+
     }
 
     public String verifyKiwoomTokenAndCreateJwt(String kiwoomToken) {

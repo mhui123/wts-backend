@@ -6,6 +6,7 @@ import com.wts.auth.JwtUtil;
 import com.wts.kiwoom.dto.KiwoomApiRequest;
 import com.wts.kiwoom.dto.StockDetailInfo;
 import com.wts.kiwoom.dto.StockDto;
+import com.wts.kiwoom.dto.WatchListDto;
 import com.wts.kiwoom.entity.KiwoomStock;
 import com.wts.kiwoom.entity.UserWatchGroup;
 import com.wts.kiwoom.entity.UserWatchListItem;
@@ -31,7 +32,6 @@ import java.util.stream.Collectors;
 public class KiwoomApiService {
     private final PythonServerService pythonService;
     private final JwtUtil jwtUtil;
-    private final KiwoomTokenManager kiwoomTokenManager;
     private final MapCaster caster;
     private final KiwoomStockRepository stockRepo;
     private final UserWatchGroupRepository userWatchGroupRepository;
@@ -49,21 +49,6 @@ public class KiwoomApiService {
                     .message("키움 로그인 실패: " + e.getMessage())
                     .build();
         }
-    }
-
-    public Optional<String> getKiwoomToken(String jwt) {
-        long userId = Long.parseLong(jwtUtil.getSubject(jwt));
-        String tokenId = jwtUtil.getKiwoomTokenRef(jwt);
-
-        Optional<String> kiwoomToken = kiwoomTokenManager.getKiwoomToken(userId, tokenId);
-
-        if (kiwoomToken.isEmpty()) {
-            String msg = String.format("키움 토큰을 찾을 수 없음: userId=%d", userId);
-            log.warn(msg);
-            return Optional.empty();
-        }
-
-        return kiwoomToken;
     }
 
     public ProcessResult syncKiwoomStocks() {
@@ -475,19 +460,19 @@ public class KiwoomApiService {
             return StockDetailInfo.builder()
                     .stockCd(String.valueOf(stockInfoData.get("stk_cd")))
                     .stockNm(String.valueOf(stockInfoData.get("stk_nm")))
-                    .nowPrice(BigDecimal.valueOf(Long.parseLong(String.valueOf(stockInfoData.get("cur_prc")))))
-                    .yesterdayClosePrice(BigDecimal.valueOf(Long.parseLong(String.valueOf(stockInfoData.get("base_pric")))))
-                    .changePrice(BigDecimal.valueOf(Long.parseLong(String.valueOf(stockInfoData.get("pred_pre")))))
-                    .changeDirection(BigDecimal.valueOf(Long.parseLong(String.valueOf(stockInfoData.get("pred_pre_sig")))))
+                    .nowPrice(parseToBigdecimal(stockInfoData.get("cur_prc")))
+                    .yesterdayClosePrice(parseToBigdecimal(stockInfoData.get("base_pric")))
+                    .changePrice(parseToBigdecimal(stockInfoData.get("pred_pre")))
+                    .changeDirection(parseToBigdecimal(stockInfoData.get("pred_pre_sig")))
                     .changeRate(String.valueOf(stockInfoData.get("flu_rt")))
-                    .tradeVolume(BigDecimal.valueOf(Long.parseLong(String.valueOf(stockInfoData.get("trde_qty")))))
-                    .tradeValue(BigDecimal.valueOf(Long.parseLong(String.valueOf(stockInfoData.get("trde_prica")))))
-                    .highPrice(BigDecimal.valueOf(Long.parseLong(String.valueOf(stockInfoData.get("high_pric")))))
-                    .lowPrice(BigDecimal.valueOf(Long.parseLong(String.valueOf(stockInfoData.get("low_pric")))))
-                    .openingPrice(BigDecimal.valueOf(Long.parseLong(String.valueOf(stockInfoData.get("open_pric")))))
-                    .closePrice(BigDecimal.valueOf(Long.parseLong(String.valueOf(stockInfoData.get("close_pric")))))
-                    .upLimitPrice(BigDecimal.valueOf(Long.parseLong(String.valueOf(stockInfoData.get("upl_pric")))))
-                    .lowLimitPrice(BigDecimal.valueOf(Long.parseLong(String.valueOf(stockInfoData.get("lst_pric")))))
+                    .tradeVolume(parseToBigdecimal(stockInfoData.get("trde_qty")))
+                    .tradeValue(parseToBigdecimal(stockInfoData.get("trde_prica")))
+                    .highPrice(parseToBigdecimal(stockInfoData.get("high_pric")))
+                    .lowPrice(parseToBigdecimal(stockInfoData.get("low_pric")))
+                    .openingPrice(parseToBigdecimal(stockInfoData.get("open_pric")))
+                    .closePrice(parseToBigdecimal(stockInfoData.get("close_pric")))
+                    .upLimitPrice(parseToBigdecimal(stockInfoData.get("upl_pric")))
+                    .lowLimitPrice(parseToBigdecimal(stockInfoData.get("lst_pric")))
                     .build();
         } catch (Exception e) {
             log.warn("StockDetailInfo 생성 실패: {}", e.getMessage());
@@ -495,7 +480,9 @@ public class KiwoomApiService {
         }
     }
 
-
+    private BigDecimal parseToBigdecimal(Object o){
+        return BigDecimal.valueOf(Long.parseLong(String.valueOf(o)));
+    }
 
     /**
      * 관심종목 그룹 생성
@@ -656,6 +643,21 @@ public class KiwoomApiService {
             return ProcessResult.builder()
                     .success(false)
                     .message("관심종목 삭제 실패: " + e.getMessage())
+                    .build();
+        }
+    }
+
+    public ProcessResult reqRealTimeData(String jwt, WatchListDto dto, String switchType) {
+        try {
+            String kiwoomToken = uRequest.getKiwoomTokenFromJwt(jwt);
+            String uri = "subscribe".equals(switchType) ? "/kiwoom/realtime/subscribe" : "/kiwoom/realtime/unsubscribe";
+
+            return pythonService.subscribeRealtimeData(uri, dto, kiwoomToken);
+        } catch (Exception e) {
+            log.error("실시간 데이터 구독 실패: userId={}", dto.getUserId(), e);
+            return ProcessResult.builder()
+                    .success(false)
+                    .message("실시간 데이터 구독 실패: " + e.getMessage())
                     .build();
         }
     }

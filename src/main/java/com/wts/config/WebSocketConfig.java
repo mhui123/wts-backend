@@ -24,7 +24,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         config.setApplicationDestinationPrefixes("/app");
     }
 
-    //WebSocket 주소를 ws://localhost:9789/ws로 설정
+    //구독한 클라이언트가 연결할 수 있는 STOMP 엔드포인트를 /ws로 등록
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws").setAllowedOriginPatterns("*");
