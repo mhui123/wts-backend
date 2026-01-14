@@ -8,8 +8,8 @@ import com.wts.kiwoom.dto.KeyDto;
 import com.wts.kiwoom.dto.WatchListDto;
 import com.wts.model.*;
 import com.wts.util.MapCaster;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -26,7 +26,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class PythonServerService {
 
@@ -35,6 +34,19 @@ public class PythonServerService {
     private final TradeHistoryService tService;
     private final JwtUtil jwtUtil;
     private final MapCaster caster;
+
+    public PythonServerService(
+            @Qualifier("pythonWebClient") WebClient pythonWebClient,
+            @Qualifier("py32WebClient") WebClient py32WebClient,
+            TradeHistoryService tService,
+            JwtUtil jwtUtil,
+            MapCaster caster) {
+        this.pythonWebClient = pythonWebClient;
+        this.py32WebClient = py32WebClient;
+        this.tService = tService;
+        this.jwtUtil = jwtUtil;
+        this.caster = caster;
+    }
 
     @Value("${external.python-server.timeout:30}")
     private int timeoutSeconds;
