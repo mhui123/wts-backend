@@ -21,8 +21,37 @@ public class MapCaster {
     /**
      * Map 타입 안전 추출 - @SuppressWarnings 제거
      */
+    @SuppressWarnings("unchecked")
     public Map<String, Object> safeMapCast(Object obj) {
-        return safeCast(obj, Map.class);
+        if (obj == null) {
+            log.debug("safeMapCast: input object is null");
+            return null;
+        }
+
+        log.debug("safeMapCast: input object type = {}, value = {}", obj.getClass().getName(), obj);
+
+        // LinkedHashMap과 HashMap 등 Map 구현체들을 모두 처리
+        if (obj instanceof Map) {
+            try {
+                Map<?, ?> rawMap = (Map<?, ?>) obj;
+                // key가 String이 아닌 경우에 대한 방어 코드
+                Map<String, Object> result = new java.util.HashMap<>();
+                for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+                    String key = entry.getKey() != null ? entry.getKey().toString() : null;
+                    if (key != null) {
+                        result.put(key, entry.getValue());
+                    }
+                }
+                log.debug("safeMapCast: successfully converted to Map<String, Object>, size = {}", result.size());
+                return result;
+            } catch (ClassCastException e) {
+                log.warn("safeMapCast: ClassCastException when casting to Map", e);
+                return null;
+            }
+        }
+
+        log.warn("safeMapCast: object is not a Map instance, type = {}", obj.getClass().getName());
+        return null;
     }
 
     /**

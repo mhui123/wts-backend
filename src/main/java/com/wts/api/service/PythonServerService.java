@@ -1,5 +1,6 @@
 package com.wts.api.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wts.api.dto.PythonResponseDto;
 import com.wts.api.dto.StockPriceResponseDto;
 import com.wts.api.dto.TradeHistoryUploadDto;
@@ -90,19 +91,45 @@ public class PythonServerService {
         }
     }
 
-    public PythonResponseDto executeGetTask(String uri) {
+    public ProcessResult executeGetTask(String uri) {
+        return executeGetTask(uri, null);
+    }
+
+    public ProcessResult executeGetTask(String uri, Map<String, Object> params) {
         try {
-            return pythonWebClient.get()
-                    .uri(uri)
+            // 먼저 JSON String으로 받아서 로그로 확인
+            String jsonResponse = pythonWebClient.get()
+                    .uri(uriBuilder -> {
+                        uriBuilder.path(uri);
+                        if (params != null) {
+                            params.forEach((key, value) -> {
+                                if (value != null) {
+                                    uriBuilder.queryParam(key, value);
+                                }
+                            });
+                        }
+                        return uriBuilder.build();
+                    })
                     .retrieve()
-                    .bodyToMono(PythonResponseDto.class)
+                    .bodyToMono(String.class)
                     .timeout(Duration.ofSeconds(timeoutSeconds))
                     .doOnError(error -> log.error("Python 서버 호출 실패: ", error))
-                    .onErrorReturn(createErrorResponse("서버 통신 오류"))
+                    .onErrorReturn("{\"success\": false, \"message\": \"서버 통신 오류\"}")
                     .block();
+
+            log.debug("Python response JSON: {}", jsonResponse);
+
+            // JSON String을 ProcessResult로 변환
+            ObjectMapper mapper = new ObjectMapper();
+            ProcessResult result = mapper.readValue(jsonResponse, ProcessResult.class);
+            log.debug("Parsed ProcessResult: success={}, message={}, data={}, dataType={}",
+                result.isSuccess(), result.getMessage(), result.getData(),
+                result.getData() != null ? result.getData().getClass().getName() : "null");
+
+            return result;
         } catch (Exception e) {
             log.error("Python 서버 executeGetTask 오류: ", e);
-            return createErrorResponse("작업 실행 실패: " + e.getMessage());
+            return createErrorProcess("작업 실행 실패: " + e.getMessage());
         }
     }
 
@@ -140,30 +167,22 @@ public class PythonServerService {
      */
     public ProcessResult getTicker(String isin) {
         try {
-            String uri = "/kiwoom/getTicker";
-            if (isin != null && !isin.isEmpty()) {
-                uri += "?isin=" + isin;
-            } else {
+            if (isin == null || isin.isEmpty()) {
                 return createErrorProcess("ISIN 값이 필요합니다.");
             }
 
-            PythonResponseDto response = pythonWebClient.get()
-                    .uri(uri)
-                    .retrieve()
-                    .bodyToMono(PythonResponseDto.class)
-                    .timeout(Duration.ofSeconds(timeoutSeconds))
-                    .doOnError(error -> log.error("Python 서버 getTicker 호출 실패: ", error))
-                    .onErrorReturn(createErrorResponse("티커 조회 서버 통신 오류"))
-                    .block();
-            if (response != null && response.isSuccess() && response.getData() != null) {
-                Map<String, Object> dataMap = caster.safeMapCast(response.getData());
+            Map<String, Object> params = Map.of("isin", isin);
+            ProcessResult result = executeGetTask("/wpy/getTicker", params);
+
+            if (result != null && result.isSuccess() && result.getData() != null) {
+                Map<String, Object> dataMap = caster.safeMapCast(result.getData());
                 String ticker = (String) dataMap.get("ticker");
                 return ProcessResult.builder()
                         .success(true)
                         .message(ticker)
                         .build();
             } else {
-                return createErrorProcess("티커 조회 실패: " + (response != null ? response.getMessage() : "알 수 없는 오류"));
+                return createErrorProcess("티커 조회 실패: " + (result != null ? result.getMessage() : "알 수 없는 오류"));
             }
         } catch (Exception e) {
             log.error("Python 서버 getTicker 오류: ", e);
@@ -212,7 +231,7 @@ public class PythonServerService {
 
     public StockPriceResponseDto getStockPrice(String symbols) {
         try {
-            String uri = "/kiwoom/stock/prices";
+            String uri = "/wpy/stock/prices";
             if (symbols != null && !symbols.isEmpty()) {
                 uri += "?symbols=" + symbols;
             }
@@ -470,6 +489,45 @@ public class PythonServerService {
         } catch (Exception e) {
             log.error("Python 서버 executeTask 오류: ", e);
             return createErrorResponse("작업 실행 실패: " + e.getMessage());
+        }
+    }
+
+    public ProcessResult requestCandleData(String ticker) {
+        String uri = "/wpy/getCandleData";
+        try {
+            ProcessResult response = executeGetTask(uri, Map.of("ticker", ticker));
+            log.debug("requestCandleData response: success={}, data={}, dataType={}",
+                response != null ? response.isSuccess() : "null",
+                response != null ? response.getData() : "null",
+                response != null && response.getData() != null ? response.getData().getClass().getName() : "null");
+
+            if (response != null && response.isSuccess() && response.getData() != null) {
+                Map<String, Object> dataMap = caster.safeMapCast(response.getData());
+                log.debug("requestCandleData dataMap after cast: {}", dataMap);
+
+                if (dataMap != null) {
+                    Object returnMsgObj = dataMap.get("return_msg");
+                    String returnMsg = returnMsgObj != null ? returnMsgObj.toString() : "성공";
+
+                    return ProcessResult.builder()
+                            .success(true)
+                            .message(returnMsg)
+                            .data(response.getData())
+                            .build();
+                } else {
+                    // dataMap이 null인 경우에도 원본 데이터를 반환
+                    return ProcessResult.builder()
+                            .success(true)
+                            .message("캔들 데이터 조회 완료 (데이터 변환 경고)")
+                            .data(response.getData())
+                            .build();
+                }
+            } else {
+                return createErrorProcess("캔들데이터 조회 실패: " + (response != null ? response.getMessage() : "알 수 없는 오류"));
+            }
+        } catch (Exception e) {
+            log.error("Python 서버 캔들데이터 조회 오류: ", e);
+            return createErrorProcess("캔들데이터 조회 실패: " + e.getMessage());
         }
     }
 }

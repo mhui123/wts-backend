@@ -10,7 +10,11 @@ import java.time.LocalDateTime;
 
 
 @Entity
-@Table(name = "stock_distributions")
+@Table(name = "stock_distributions",
+       uniqueConstraints = @UniqueConstraint(
+           name = "ux_ticker_declareddate",
+           columnNames = {"ticker", "declared_date"}
+       ))
 @Getter
 @Setter
 @NoArgsConstructor

@@ -97,4 +97,28 @@ public class PythonController {
         }
     }
 
+    @GetMapping(value = "/getCandleData")
+    public ResponseEntity<ProcessResult> getCandleData(
+            @RequestParam(name = "ticker", required = false) String ticker,
+            Authentication authentication) {
+
+        try {
+            Long userId = jwtUtil.extractUserIdFromAuthentication(authentication);
+            if (userId == null) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            ProcessResult response = pythonServerService.requestCandleData(ticker);
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("캔들데이터 획득 실패: ", e);
+            ProcessResult errorResponse = ProcessResult.builder()
+                    .success(false)
+                    .message("캔들데이터 획득 실패: " + e.getMessage())
+                    .build();
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
+
 }
