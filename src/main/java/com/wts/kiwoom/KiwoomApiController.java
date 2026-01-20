@@ -241,4 +241,43 @@ public class KiwoomApiController {
             return ResponseEntity.internalServerError().body("처리 중 오류가 발생했습니다.");
         }
     }
+
+    @PostMapping("/realtime/unsubscribe/{userId}")
+    @PreAuthorize("@kiwoomPermissionService.hasPermission(#userId, 'BASIC_USER')")
+    public ResponseEntity<?> unsubscribePriceData(@PathVariable String userId, @RequestBody WatchListDto dto, HttpServletRequest request) {
+        long startTime = System.currentTimeMillis();
+
+        String jwt = uRe.attractJwtFromRequest(request);
+        if( jwt == null) {
+            String msg = "Authorization 헤더에서 JWT를 찾을 수 없습니다.";
+            return ResponseEntity.internalServerError().body(ProcessResult.failure(msg));
+        }
+
+        try {
+            ProcessResult result = apiService.reqRealTimeData(jwt, dto, "unsubscribe");
+
+            long executionTime = System.currentTimeMillis() - startTime;
+//            auditService.logApiRequest(
+//                    longUserId,
+//                    "/api/kiwoom/users/" + userId + "/watchlist/groups/" + groupName,
+//                    executionTime,
+//                    result
+//            );
+
+            return ResponseEntity.ok().body(result);
+
+        } catch (Exception e) {
+            ProcessResult result = ProcessResult.failure("관심종목 그룹 동기화 실패: " + e.getMessage());
+
+//            long executionTime = System.currentTimeMillis() - startTime;
+//            auditService.logApiRequest(
+//                    longUserId,
+//                    "/api/kiwoom/users/" + userId + "/watchlist/groups/" + groupName,
+//                    executionTime,
+//                    result
+//            );
+
+            return ResponseEntity.internalServerError().body("처리 중 오류가 발생했습니다.");
+        }
+    }
 }

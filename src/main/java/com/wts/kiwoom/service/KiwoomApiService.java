@@ -647,10 +647,10 @@ public class KiwoomApiService {
         }
     }
 
-    public ProcessResult reqRealTimeData(String jwt, WatchListDto dto, String switchType) {
+    public ProcessResult reqRealTimeData(String jwt, WatchListDto dto, String type) {
         try {
             String kiwoomToken = uRequest.getKiwoomTokenFromJwt(jwt);
-            String uri = "subscribe".equals(switchType) ? "/kiwoom/realtime/subscribe" : "/kiwoom/realtime/unsubscribe";
+            String uri = "/kiwoom/realtime/" + type;
 
             return pythonService.subscribeRealtimeData(uri, dto, kiwoomToken);
         } catch (Exception e) {

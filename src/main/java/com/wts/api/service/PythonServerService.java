@@ -91,6 +91,23 @@ public class PythonServerService {
         }
     }
 
+    public void executePostTaskFireAndForget(String uri, Map<String, Object> params) {
+        try {
+            pythonWebClient.post()
+                    .uri(uri)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(params != null ? params : Map.of())
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(Duration.ofSeconds(5)) // 짧은 타임아웃
+                    .doOnSuccess(result -> log.debug("Fire-and-forget 요청 완료: uri={}", uri))
+                    .doOnError(error -> log.warn("Fire-and-forget 요청 실패: uri={}, error={}", uri, error.getMessage()))
+                    .subscribe(); // 비동기 실행, 응답 무시
+        } catch (Exception e) {
+            log.warn("Fire-and-forget 요청 예외: uri={}, error={}", uri, e.getMessage());
+        }
+    }
+
     public ProcessResult executeGetTask(String uri) {
         return executeGetTask(uri, null);
     }
@@ -372,19 +389,12 @@ public class PythonServerService {
         payload.put("token", kiwoomToken);
         payload.put("stockCodes", stockCodes);
         payload.put("userId", userId);
-        PythonResponseDto response = executePostTask(uri, payload);
+        executePostTaskFireAndForget(uri, payload);
 
-        if (response != null && response.isSuccess() && response.getData() != null) {
-            Map<String, Object> dataMap = caster.safeMapCast(response.getData());
-
-            return ProcessResult.builder()
-                    .success(true)
-                    .message(dataMap.get("return_msg").toString())
-                    .data(response.getData())
-                    .build();
-        } else {
-            return createErrorProcess("구독신청 실패: " + (response != null ? response.getMessage() : "알 수 없는 오류"));
-        }
+        return ProcessResult.builder()
+                .success(true)
+                .message("실시간 데이터 구독 요청 완료")
+                .build();
 
     }
 
