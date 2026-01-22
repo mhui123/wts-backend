@@ -97,6 +97,40 @@ public class PythonController {
         }
     }
 
+    @PostMapping(value = "/uploadKiwoomTradeHistory", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ProcessResult> uploadKiwoomTradeHistory(
+            @RequestPart("file") MultipartFile file,
+            Authentication authentication) {
+
+        try {
+            // DTO 생성
+            Long userId = jwtUtil.extractUserIdFromAuthentication(authentication);
+            if (userId == null) {
+                return ResponseEntity.badRequest().build();
+            }
+            log.info("거래내역 업로드 요청: userId={}, filename={}", userId, file.getOriginalFilename());
+            TradeHistoryUploadDto uploadDto = TradeHistoryUploadDto.builder()
+                    .userId(String.valueOf(userId))
+                    .file(file)
+                    .build();
+
+            // Python 서버에서 JSON 데이터 받아오기
+            ProcessResult response = pythonServerService.uploadKiwoomTradeHistory(uploadDto);
+            if(response.isSuccess()){
+                dService.setDataToPortfolioItem(userId); //portfolioItem 최신화
+            }
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("거래내역 업로드 실패: ", e);
+            ProcessResult errorResponse = ProcessResult.builder()
+                    .success(false)
+                    .message("거래내역 업로드 실패: " + e.getMessage())
+                    .build();
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
+
     @GetMapping(value = "/getCandleData")
     public ResponseEntity<ProcessResult> getCandleData(
             @RequestParam(name = "ticker", required = false) String ticker,

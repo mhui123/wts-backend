@@ -246,6 +246,45 @@ public class PythonServerService {
         }
     }
 
+    /**
+     * 거래내역을 Python 서버로 업로드 (POST)
+     */
+    public ProcessResult uploadKiwoomTradeHistory(TradeHistoryUploadDto uploadDto) {
+        try {
+            String userId = uploadDto.getUserId();
+            PythonResponseDto response = pythonWebClient.post()
+                    .uri("/wpy/uploadKiwoomTradeHistory")
+                    .body(BodyInserters.fromMultipartData("file", uploadDto.getFile().getResource())
+                            .with("userId", userId))
+                    .retrieve()
+                    .bodyToMono(PythonResponseDto.class)
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
+                    .doOnError(error -> log.error("Python 서버 uploadTradeHistory 호출 실패: ", error))
+                    .onErrorReturn(createErrorResponse("거래내역 업로드 서버 통신 오류"))
+                    .block();
+
+            if (response != null && response.isSuccess() && response.getData() != null) {
+                // data를 Map으로 캐스팅
+                Map<String, Object> dataMap = caster.safeMapCast(response.getData());
+                String jsonData = (String) dataMap.get("json_data");
+
+                if (jsonData != null) {
+                    // TradeHistory로 변환하여 저장
+                    return tService.saveTradeHistoryFromJson(jsonData, Long.valueOf(userId));
+                } else {
+                    return createErrorProcess("거래내역 데이터가 없습니다.");
+                }
+            } else {
+                String msg = response != null ? (response.getMessage().contains("rolled back") ? "거래내역 중복" : "알 수 없는 오류") : "알 수 없는 오류";
+                return createErrorProcess("거래내역 업로드 실패: " + msg);
+            }
+        } catch (Exception e) {
+            String msg = e.getMessage().contains("rolled back") ? "거래내역 중복" : "알 수 없는 오류";
+            log.error("Python 서버 uploadTradeHistory 오류: ", e);
+            return createErrorProcess("거래내역 업로드 실패: " + msg);
+        }
+    }
+
     public StockPriceResponseDto getStockPrice(String symbols) {
         try {
             String uri = "/wpy/stock/prices";
