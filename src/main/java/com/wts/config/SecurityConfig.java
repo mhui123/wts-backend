@@ -2,6 +2,7 @@
 // 주요 책임: Spring Security 필터 체인 구성
 package com.wts.config;
 
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -67,17 +68,45 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
-                        // 키움 인증 엔드포인트는 공개 (JWT 발급용)
+                        // 정적 리소스 (프론트엔드 빌드 결과물) 공개
+                        .requestMatchers("/", "/login", "/index.html", "/assets/**", "/favicon.ico",
+                                       "/*.js", "/*.css", "/*.png", "/*.jpg", "/*.svg", "/*.ico").permitAll()
+                        // 키움 인증 엔드포인트 공개 (JWT 발급용)
                         .requestMatchers("/api/kiwoom/authenticate", "/api/kiwoom/public/**", "/api/guest/**").permitAll()
-                        // 기타 공개 경로
+                        // OAuth2 및 인증 관련 경로 공개
                         .requestMatchers("/ws/**", "/actuator/**", "/auth/**", "/oauth2/**", "/login/oauth2/**").permitAll()
                         // 키움 API는 JWT 인증 필요
                         .requestMatchers("/api/kiwoom/**").authenticated()
-                        .anyRequest().authenticated()
+                        // 기타 API는 인증 필요
+                        .requestMatchers("/api/**").authenticated()
+                        // 나머지 요청은 공개 (SPA 라우팅 지원)
+                        .anyRequest().permitAll()
                 )
                 .oauth2Login(oauth -> oauth
                         .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
                         .successHandler(successHandler)
+                )
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            String requestUri = request.getRequestURI();
+
+                            // API 요청은 401 반환
+                            if (requestUri.startsWith("/api/")) {
+                                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                                response.setContentType("application/json");
+                                response.getWriter().write("{\"error\":\"Unauthorized\",\"message\":\"Authentication required\"}");
+                                return;
+                            }
+
+                            // 정적 리소스는 index.html로 포워드 (SPA 라우팅 지원)
+                            if (!requestUri.startsWith("/oauth2/") && !requestUri.startsWith("/login/oauth2/")) {
+                                request.getRequestDispatcher("/index.html").forward(request, response);
+                                return;
+                            }
+
+                            // OAuth2 콜백 요청은 기본 처리
+                            response.sendRedirect("/oauth2/authorization/google");
+                        })
                 )
                 .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class);
         return http.build();
