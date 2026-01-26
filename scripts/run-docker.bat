@@ -1,9 +1,12 @@
 @echo off
+chcp 65001 >nul 2>&1
 setlocal enabledelayedexpansion
+
 
 echo =================================
 echo Docker Compose WTS Backend 실행
 echo =================================
+
 
 REM 1. .env 파일 존재 확인
 echo.
@@ -39,15 +42,17 @@ if not exist "build\libs\wts-backend-0.0.1-SNAPSHOT.jar" (
 )
 echo [확인] JAR 파일 생성 완료
 
-REM 5. Docker 이미지 강제 재빌드 (캐시 없이)
+REM 5. Docker 이미지 재빌드
 echo.
 echo 5. Docker 이미지 재빌드...
-docker build --no-cache -t wts-backend:latest .
+docker build -t wts-backend:latest .
 if errorlevel 1 (
     echo [오류] Docker 이미지 빌드 실패!
     pause
     exit /b 1
 )
+
+REM --no-cache는 매번 전체 레이어를 새로 빌드하여 시간 소요가 크므로 docker build 에서 제거함.
 
 REM 6. Docker Compose 실행
 echo.
@@ -63,6 +68,18 @@ REM 7. 백엔드 컨테이너 시작 대기
 echo.
 echo 7. 백엔드 컨테이너 시작 대기 (30초)...
 timeout /t 30 /nobreak >nul
+
+REM 7-1. Python 컨테이너 연결 테스트
+echo.
+echo 7-1. Python 컨테이너 연결 테스트...
+docker exec wts-backend-container curl -s http://wts-python-app:19789/health >nul 2>&1
+if errorlevel 1 (
+    echo [경고] Python 컨테이너 연결 실패!
+    echo - Python 컨테이너가 실행 중인지 확인하세요.
+    echo - 같은 네트워크(wts-backend_wts-network)에 있는지 확인하세요.
+) else (
+    echo [확인] Python 컨테이너 연결 성공!
+)
 
 REM 8. 로그 확인
 echo.

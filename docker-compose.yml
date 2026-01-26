@@ -32,6 +32,11 @@ services:
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_DATA_REDIS_TIMEOUT=5000ms
+      # Python 서버 설정 (호스트에서 실행)
+      - EXTERNAL_PYTHON_SERVER_BASE_URL=${EXTERNAL_PYTHON_SERVER_BASE_URL:-http://wts-python-app:19789}
+      - EXTERNAL_PYTHON_SERVER_PY32_URL=${EXTERNAL_PYTHON_SERVER_PY32_URL:-http://host.docker.internal:19987}
+      - EXTERNAL_PYTHON_SERVER_TIMEOUT=${EXTERNAL_PYTHON_SERVER_TIMEOUT:-30}
+      - EXTERNAL_PYTHON_SERVER_MAX_RETRY=${EXTERNAL_PYTHON_SERVER_MAX_RETRY:-3}
       # Google OAuth2 설정 (.env 파일에서 로드)
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-PLEASE-SET-ENVIRONMENT-VARIABLE}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-PLEASE-SET-ENVIRONMENT-VARIABLE}
@@ -43,7 +48,8 @@ services:
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
-
 networks:
   wts-network:
-    driver: bridge
+    external: true
+    name: wts-backend_wts-network # 파이썬서버의 네트워크 이름. inspect에서 확인.
+#    driver: bridge #driver: bridge 제거: external 네트워크는 driver 지정 불필요

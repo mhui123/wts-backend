@@ -117,3 +117,12 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+
+# Python 외부 서버 설정 (Docker 환경)
+external:
+  python-server:
+    base-url: ${EXTERNAL_PYTHON_SERVER_BASE_URL:http://host.docker.internal:19789}
+    py32-url: ${EXTERNAL_PYTHON_SERVER_PY32_URL:http://host.docker.internal:19987}
+    timeout: ${EXTERNAL_PYTHON_SERVER_TIMEOUT:30}
+    max-retry: ${EXTERNAL_PYTHON_SERVER_MAX_RETRY:3}
+

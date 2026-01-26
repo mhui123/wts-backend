@@ -112,10 +112,10 @@ app:
 
 external:
   python-server:
-    base-url: http://localhost:19789
-    py32-url: http://localhost:19987
-    timeout: 30  # 타임아웃 (초)
-    max-retry: 3  # 최대 재시도 횟수
+    base-url: ${EXTERNAL_PYTHON_SERVER_BASE_URL:http://localhost:19789}
+    py32-url: ${EXTERNAL_PYTHON_SERVER_PY32_URL:http://localhost:19987}
+    timeout: ${EXTERNAL_PYTHON_SERVER_TIMEOUT:30}  # 타임아웃 (초)
+    max-retry: ${EXTERNAL_PYTHON_SERVER_MAX_RETRY:3}  # 최대 재시도 횟수
 
 # Redis 채널 설정
 redis:
