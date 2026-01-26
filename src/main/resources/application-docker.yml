@@ -1,0 +1,119 @@
+# Docker 환경 전용 설정
+server:
+  port: 9789
+
+check-dev:
+  isdev: false
+
+adapter:
+  base-url: http://host.docker.internal:8000
+
+quotes:
+  codes: ""
+
+spring:
+  application:
+    name: wts-backend
+
+  main:
+    banner-mode: console
+
+  datasource:
+    url: jdbc:mysql://host.docker.internal:3546/stockdb
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: 1234
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      connection-timeout: 20000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        format_sql: true
+        show_sql: false
+    open-in-view: false
+
+  jackson:
+    serialization:
+      WRITE_DATES_AS_TIMESTAMPS: false
+
+  h2:
+    console:
+      enabled: false
+
+  # Redis 설정 - 환경변수로 오버라이드 가능하도록 변경
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:redis}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: ${SPRING_DATA_REDIS_TIMEOUT:5000ms}
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+        shutdown-timeout: 2000ms
+
+  # Google OAuth2 설정 (환경변수로 주입)
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:PLEASE-SET-ENVIRONMENT-VARIABLE}
+            client-secret: ${GOOGLE_CLIENT_SECRET:PLEASE-SET-ENVIRONMENT-VARIABLE}
+            scope:
+              - openid
+              - profile
+              - email
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            authorization-grant-type: authorization_code
+        provider:
+          google:
+            authorization-uri: https://accounts.google.com/o/oauth2/v2/auth
+            token-uri: https://www.googleapis.com/oauth2/v4/token
+            user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+            user-name-attribute: sub
+
+  web:
+    resources:
+      static-locations: classpath:/static/
+      chain:
+        strategy:
+          content:
+            enabled: true
+  mvc:
+    static-path-pattern: /**
+
+logging:
+  level:
+    root: INFO
+    org.springframework.web: INFO
+    org.springframework.security: WARN
+    com.wts.auth.security.JwtAuthenticationFilter: WARN
+
+# Kiwoom REST API 설정
+kiwoom:
+  encryption:
+    secret: ${KIWOOM_ENCRYPTION_SECRET:PLEASE-SET-ENVIRONMENT-VARIABLE}
+    salt: ${KIWOOM_ENCRYPTION_SALT:PLEASE-SET-ENVIRONMENT-VARIABLE}
+  base.dev-url: https://mockapi.kiwoom.com
+  base.url: https://api.kiwoom.com
+  timeout: 30000
+
+# Actuator 설정 (헬스체크용)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,env,configprops
+  endpoint:
+    health:
+      show-details: when-authorized

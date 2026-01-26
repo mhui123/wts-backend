@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: wts-backend-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - wts-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  wts-backend:
+    image: wts-backend:latest
+    container_name: wts-backend-container
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "9789:9789"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:mysql://host.docker.internal:3546/stockdb
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=1234
+      # Redis 설정 (Spring Boot 3.x)
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - SPRING_DATA_REDIS_TIMEOUT=5000ms
+      # Google OAuth2 설정 (.env 파일에서 로드)
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-PLEASE-SET-ENVIRONMENT-VARIABLE}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-PLEASE-SET-ENVIRONMENT-VARIABLE}
+      # Kiwoom 암호화 설정 (.env 파일에서 로드)
+      - KIWOOM_ENCRYPTION_SECRET=${KIWOOM_ENCRYPTION_SECRET:-PLEASE-SET-ENVIRONMENT-VARIABLE}
+      - KIWOOM_ENCRYPTION_SALT=${KIWOOM_ENCRYPTION_SALT:-PLEASE-SET-ENVIRONMENT-VARIABLE}
+    networks:
+      - wts-network
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+networks:
+  wts-network:
+    driver: bridge
