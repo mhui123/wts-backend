@@ -7,5 +7,6 @@ import java.util.Optional;
 
 public interface KiwoomApiKeyRepository extends JpaRepository<KiwoomApiKey, Long> {
     Optional<KiwoomApiKey> findByUserId(Long userId);
+    Optional<KiwoomApiKey> findByUserIdAndIsActive(Long userId, Boolean isActive);
 }
 

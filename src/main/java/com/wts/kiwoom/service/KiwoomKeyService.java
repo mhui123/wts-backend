@@ -7,14 +7,20 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.encrypt.Encryptors;
 import org.springframework.security.crypto.encrypt.TextEncryptor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
 
 @Service
 public class KiwoomKeyService {
 
-    private TextEncryptor encryptor;
+    private final TextEncryptor encryptor;
+    private final KiwoomApiKeyRepository repository;
 
     public KiwoomKeyService(@Value("${kiwoom.encryption.secret}") String encryptionSecret,
-                            @Value("${kiwoom.encryption.salt}") String salt) {
+                            @Value("${kiwoom.encryption.salt}") String salt,
+                            KiwoomApiKeyRepository repository) {
+        this.repository = repository;
         // 환경변수 검증 - 기본값 체크 추가
         if (encryptionSecret == null || encryptionSecret.trim().isEmpty() ||
                 encryptionSecret.equals("PLEASE-SET-ENVIRONMENT-VARIABLE")) {
@@ -52,6 +58,41 @@ public class KiwoomKeyService {
         } catch (Exception e) {
             throw new IllegalStateException("암호화 모듈 초기화 실패: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 새로운 키를 등록합니다.
+     * 기존 활성 키가 있다면 비활성화하고 새로운 키를 활성화합니다.
+     */
+    @Transactional
+    public KiwoomApiKey registerNewKey(Long userId, String appKey, String appSecret) {
+        // 1. 기존 활성 키 비활성화
+        Optional<KiwoomApiKey> existingActiveKey = getActiveKey(userId);
+        if (existingActiveKey.isPresent()) {
+            KiwoomApiKey activeKey = existingActiveKey.get();
+            activeKey.setIsActive(false);
+            repository.save(activeKey);
+        }
+
+        // 2. 새로운 키 암호화 및 저장
+        String encryptedAppKey = encrypt(appKey);
+        String encryptedSecretKey = encrypt(appSecret);
+
+        KiwoomApiKey newApiKey = KiwoomApiKey.builder()
+                .userId(userId)
+                .encryptedAppKey(encryptedAppKey)
+                .encryptedSecretKey(encryptedSecretKey)
+                .isActive(true)
+                .build();
+
+        return repository.save(newApiKey);
+    }
+
+    /**
+     * 사용자의 활성 키를 조회합니다.
+     */
+    public Optional<KiwoomApiKey> getActiveKey(Long userId) {
+        return repository.findByUserIdAndIsActive(userId, true);
     }
 
     public String encrypt(String plainText) {

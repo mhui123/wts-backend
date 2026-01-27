@@ -3,10 +3,7 @@ package com.wts.kiwoom.service;
 import com.wts.api.service.PythonServerService;
 import com.wts.auth.JwtUtil;
 import com.wts.kiwoom.dto.KeyDto;
-import com.wts.kiwoom.dto.KiwoomApiRequest;
 import com.wts.kiwoom.entity.KiwoomApiKey;
-import com.wts.kiwoom.entity.KiwoomToken;
-import com.wts.kiwoom.repository.KiwoomApiKeyRepository;
 import com.wts.model.ProcessResult;
 import com.wts.util.MapCaster;
 import com.wts.util.UtilsForRequest;
@@ -14,7 +11,6 @@ import jakarta.validation.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -25,7 +21,6 @@ import java.util.Optional;
 @Slf4j
 public class KiwoomPublicService {
     private final KiwoomKeyService keyService;
-    private final KiwoomApiKeyRepository keyRepo;
     private final PythonServerService pythonService;
     private final JwtUtil jwtUtil;
     private final MapCaster caster;
@@ -80,18 +75,14 @@ public class KiwoomPublicService {
         try {
             log.info("키움 키 저장 처리 시작: userId={}", userId);
 
-            String encryptedAppKey = keyService.encrypt(appKey);
-            String encryptedAppSecret = keyService.encrypt(appSecret);
-
-            KiwoomApiKey apiKey = KiwoomApiKey.builder()
-                    .userId(userId)
-                    .encryptedAppKey(encryptedAppKey)
-                    .encryptedSecretKey(encryptedAppSecret)
-                    .build();
-
-            keyRepo.save(apiKey);
-
-            return true;
+            KiwoomApiKey wroteKey = keyService.registerNewKey(userId, appKey, appSecret);
+            if(wroteKey.getIsActive()){
+                log.info("키움 키 저장 성공: userId={}", userId);
+                return true;
+            } else {
+                log.error("키움 키 저장 실패 - 활성화 실패: userId={}", userId);
+                return false;
+            }
         }
         catch (DataIntegrityViolationException e) {
             log.error("키움 키 저장 실패 : ", e);
@@ -105,7 +96,7 @@ public class KiwoomPublicService {
 
     public ProcessResult kiwoomLogin(Long userId) {
         try {
-            Optional<KiwoomApiKey> apiKeyOpt = keyRepo.findByUserId(userId);
+            Optional<KiwoomApiKey> apiKeyOpt = keyService.getActiveKey(userId);
             KiwoomApiKey apiKey;
             if(apiKeyOpt.isPresent()){
                 apiKey = apiKeyOpt.get();
@@ -148,7 +139,7 @@ public class KiwoomPublicService {
             String token = uRe.getKiwoomTokenFromJwt(jwt);
 
             log.info("키움 로그아웃 처리 시작: userId={}", userId);
-            Optional<KiwoomApiKey> apiKeyOpt = keyRepo.findByUserId(userId);
+            Optional<KiwoomApiKey> apiKeyOpt = keyService.getActiveKey(userId);
             KiwoomApiKey apiKey;
             if(apiKeyOpt.isPresent()){
                 apiKey = apiKeyOpt.get();
@@ -171,9 +162,15 @@ public class KiwoomPublicService {
 
     public ProcessResult checkKiwoomKey(long userId) {
         try {
-            Optional<KiwoomApiKey> apiKeyOpt = keyRepo.findByUserId(userId);
+            Optional<KiwoomApiKey> apiKeyOpt = keyService.getActiveKey(userId);
             if (apiKeyOpt.isPresent()) {
-                return ProcessResult.success("등록된 키움 API 키가 있습니다.");
+                KiwoomApiKey info = apiKeyOpt.get();
+                if(info.getIsActive()){
+                    return ProcessResult.success("등록된 키움 API 키가 있습니다.");
+                } else {
+                    return ProcessResult.failure("등록된 키움 API 키가 비활성화 상태입니다.");
+                }
+
             } else {
                 return ProcessResult.failure("등록된 키움 API 키가 없습니다.");
             }

@@ -7,9 +7,8 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "kiwoom_api_keys",
-        uniqueConstraints = {
-                @UniqueConstraint(name = "ux_kiwoom_api_key_unique",
-                        columnNames = {"user_id"})
+        indexes = {
+                @Index(name = "idx_user_id_active", columnList = "user_id, is_active")
         })
 @Getter
 @Setter
