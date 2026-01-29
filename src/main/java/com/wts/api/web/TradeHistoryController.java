@@ -99,4 +99,25 @@ public class TradeHistoryController {
             return ResponseEntity.badRequest().build();
         }
     }
+
+    @GetMapping("/getOcilatorInfo")
+    public ResponseEntity<ProcessResult> getOcilatorInfo(
+            @RequestParam(name = "ticker", required = false) String ticker,
+            @RequestParam(name = "period", required = false) String period,
+            @RequestParam(name = "interval", required = false) String interval,
+            Authentication authentication
+    ) {
+        try {
+            Long actualUserId = jwtUtil.extractUserIdFromAuthentication(authentication);
+            if (actualUserId == null) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            ProcessResult result = dashboardService.getOcilatorInfo(ticker, period, interval);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
 }

@@ -713,4 +713,14 @@ public class DashboardService {
         return dto;
     }
 
+    public ProcessResult getOcilatorInfo(String ticker, String period, String interval) {
+
+        Map<String, Object> params = Map.of(
+                "ticker", ticker,
+                "period", period,
+                "interval", interval
+        );
+        return pService.executeGetTask("/wpy/getOcilatorData", params);
+    }
+
 }
