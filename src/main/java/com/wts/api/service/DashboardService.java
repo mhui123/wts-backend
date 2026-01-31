@@ -440,7 +440,7 @@ public class DashboardService {
         PortfolioItemDto result = new PortfolioItemDto();
         String symbolName = transactions.isEmpty() ? "" : transactions.get(0).getSymbolName();
         // 현재 구간 추적 변수
-        BigDecimal currentQty = BigDecimal.ZERO;
+        BigDecimal currentHaveQty = BigDecimal.ZERO;
         BigDecimal currentBuyAmountUsd = BigDecimal.ZERO;
         BigDecimal currentBuyAmountKrw = BigDecimal.ZERO;
         BigDecimal currentBuyQty = BigDecimal.ZERO;
@@ -469,6 +469,9 @@ public class DashboardService {
         // 주식 병합/분할 추적 변수 (새로 추가)
         BigDecimal stockMergeRatio = BigDecimal.ONE; // 누적 병합/분할 비율
         BigDecimal adjustedBuyQty = BigDecimal.ZERO; // 병합/분할 조정된 매수 수량
+        BigDecimal exportedQty = BigDecimal.ZERO; // 병합/분할로 인한 조정전 출고 수량
+        BigDecimal importedQty = BigDecimal.ZERO; // 병합/분할로 인한 조정후 입고 수량
+        BigDecimal settlementCount = BigDecimal.ZERO; // 전량매도 횟수
 
         boolean inFinalSegment = false; // 현재 최종 구간(전량매도 후 마지막 구간)인지 여부
 
@@ -488,13 +491,10 @@ public class DashboardService {
                 totalDividendKrw = totalDividendKrw.add(amountKrw);
 
             } else if ("구매".equals(tradeType)) {
-                currentQty = currentQty.add(qty);
+                currentHaveQty = currentHaveQty.add(qty);
                 currentBuyAmountUsd = currentBuyAmountUsd.add(amountUsd);
                 currentBuyAmountKrw = currentBuyAmountKrw.add(amountKrw);
                 currentBuyQty = currentBuyQty.add(qty);
-
-                // 병합/분할 비율을 적용한 조정 수량 계산
-                adjustedBuyQty = currentBuyQty.multiply(stockMergeRatio);
 
                 // 수수료/세금 누적
                 totalFeeUsd = totalFeeUsd.add(tx.getFeeUsd() != null ? tx.getFeeUsd() : BigDecimal.ZERO);
@@ -506,53 +506,61 @@ public class DashboardService {
                 totalBuyAmountUsd = totalBuyAmountUsd.add(amountUsd);
                 totalBuyAmountKrw = totalBuyAmountKrw.add(amountKrw);
 
+                avgPriceFixed = false; // 구매 시점에서는 평균단가 고정 해제
+
             } else if ("주식병합출고".equals(tradeType)) {
                 // 병합 전 출고 수량 기록 (비율 계산을 위해 저장)
-                log.info("{} 주식병합출고: 병합전 수량 {}", tx.getSymbolName(), qty);
-
+                log.debug("{} 주식병합출고: 병합전 수량 {}", tx.getSymbolName(), qty);
+                exportedQty = qty;
             } else if ("주식병합입고".equals(tradeType)) {
                 // 병합 비율 계산 및 적용
                 if (currentBuyQty.compareTo(BigDecimal.ZERO) > 0) {
-                    BigDecimal mergeRatio = qty.divide(currentBuyQty, 8, RoundingMode.HALF_UP);
-                    stockMergeRatio = stockMergeRatio.multiply(mergeRatio);
+                    importedQty = importedQty.add(qty);
+                    stockMergeRatio = importedQty.divide(exportedQty, 8, RoundingMode.HALF_UP);
 
                     // 기존 수량을 병합 후 수량으로 조정
+                    currentHaveQty = qty;
                     currentBuyQty = qty;
                     adjustedBuyQty = currentBuyQty;
+                    currentSellQty = currentSellQty.multiply(stockMergeRatio); //현재까지 판매한 수량 병합수량비율로 조정.
+                    finalSellQty = finalSellQty.multiply(stockMergeRatio);
 
-                    log.info("{} 주식병합입고: 병합비율 {}, 병합후 수량 {}",
-                            tx.getSymbolName(), mergeRatio, qty);
+                    log.debug("{} 주식병합입고: 병합비율 {}, 병합후 수량 {}, 고정된 평균단가 {}, 판매전단가 {}",
+                            tx.getSymbolName(), stockMergeRatio, qty, fixedAvgPriceUsd, preSellAvgPriceUsd);
                 }
 
             }else if ("판매".equals(tradeType)) {
                 // 판매 직전 평균단가 계산 (최초 판매 시에만)
-                if (adjustedBuyQty.compareTo(BigDecimal.ZERO) > 0 && !avgPriceFixed) {
-                    fixedAvgPriceUsd = currentBuyAmountUsd.divide(adjustedBuyQty, 8, RoundingMode.HALF_UP);
-                    fixedAvgPriceKrw = currentBuyAmountKrw.divide(adjustedBuyQty, 0, RoundingMode.HALF_UP);
+                if (currentBuyQty.compareTo(BigDecimal.ZERO) > 0 && !avgPriceFixed) {
+                    //여기서 currentBuyAmountUsd 에서 기존에 책정했던 고정평단 * 매도수량을 빼줘야 한다.
+                    BigDecimal toSubtractUsd = preSellAvgPriceUsd.multiply(finalSellQty.divide(stockMergeRatio, 8, RoundingMode.HALF_UP));
+                    currentBuyAmountUsd = currentBuyAmountUsd.subtract(toSubtractUsd);
+                    finalSellQty = BigDecimal.ZERO; //평균단가가 새로 측정되므로 기존 판매수량 초기화.
+
+                    fixedAvgPriceUsd = currentBuyAmountUsd.divide(currentBuyQty, 8, RoundingMode.HALF_UP);
+                    fixedAvgPriceKrw = currentBuyAmountKrw.divide(currentBuyQty, 0, RoundingMode.HALF_UP);
                     avgPriceFixed = true; // 평균단가 고정
 
-                    if(tx.getSymbolName().equals("일드맥스 코인베이스 옵션 배당 ETF") ||
-                            tx.getSymbolName().equals("일드맥스 테슬라 옵션 인컴 전략 ETF")) {
-                        log.info("{} 최초 판매시점 평균매수단가 고정: {} / {} = {} usd (병합비율 적용: {})",
-                                tx.getSymbolName(),
-                                currentBuyAmountUsd, adjustedBuyQty, fixedAvgPriceUsd, stockMergeRatio
+//                    finalSellQty = BigDecimal.ZERO; //이 기점으로 새롭게 매도를 계산하므로 초기화한다.
+                    if(tx.getSymbolName().equals("일드맥스 코인베이스 옵션 배당 ETF") ) {
+                        log.info("[{}]{} 최초 판매시점 평균매수단가 고정: {} / {} = {} usd (병합비율 적용: {})",
+                                tx.getTradeDate(), tx.getSymbolName(),
+                                currentBuyAmountUsd, currentBuyQty, fixedAvgPriceUsd, stockMergeRatio
                         );
                     }
                 }
                 // 현재 구간의 평균단가 사용 (고정된 값 또는 실시간 계산값)
                 preSellAvgPriceUsd = avgPriceFixed ? fixedAvgPriceUsd :
-                        (adjustedBuyQty.compareTo(BigDecimal.ZERO) > 0 ?
-                                currentBuyAmountUsd.divide(adjustedBuyQty, 8, RoundingMode.HALF_UP) : BigDecimal.ZERO);
+                        (currentBuyQty.compareTo(BigDecimal.ZERO) > 0 ?
+                                currentBuyAmountUsd.divide(currentBuyQty, 8, RoundingMode.HALF_UP) : BigDecimal.ZERO);
                 preSellAvgPriceKrw = avgPriceFixed ? fixedAvgPriceKrw :
-                        (adjustedBuyQty.compareTo(BigDecimal.ZERO) > 0 ?
-                                currentBuyAmountKrw.divide(adjustedBuyQty, 0, RoundingMode.HALF_UP) : BigDecimal.ZERO);
-
-                currentQty = currentQty.subtract(qty);
+                        (currentBuyQty.compareTo(BigDecimal.ZERO) > 0 ?
+                                currentBuyAmountKrw.divide(currentBuyQty, 0, RoundingMode.HALF_UP) : BigDecimal.ZERO);
+                // 판매로 인한 조정 수량 감소
+                currentBuyQty = currentBuyQty.subtract(qty);
+                currentHaveQty = currentHaveQty.subtract(qty);
                 totalSellAmountUsd = totalSellAmountUsd.add(amountUsd);
                 totalSellAmountKrw = totalSellAmountKrw.add(amountKrw);
-
-                // 판매로 인한 조정 수량 감소
-                adjustedBuyQty = adjustedBuyQty.subtract(qty);
 
 //                if(tx.getSymbolName().equals("일드맥스 코인베이스 옵션 배당 ETF") ||
 //                        tx.getSymbolName().equals("일드맥스 테슬라 옵션 인컴 전략 ETF")) {
@@ -567,7 +575,7 @@ public class DashboardService {
                 totalTaxKrw = totalTaxKrw.add(tx.getTaxKrw() != null ? tx.getTaxKrw() : BigDecimal.ZERO);
 
                 // 전량매도 감지
-                if (currentQty.compareTo(BigDecimal.ZERO) <= 0) {
+                if (currentHaveQty.compareTo(BigDecimal.ZERO) <= 0) {
                     log.debug("[{}], {} 전량매도 발생", tx.getTradeDate(), tx.getSymbolName());
                     //전량매도 후 다음 거래가 없을 경우 데이터 보존을 위함
                     finalBuyAmountUsd = currentBuyAmountUsd;
@@ -577,16 +585,17 @@ public class DashboardService {
                     currentBuyAmountUsd = BigDecimal.ZERO;
                     currentBuyAmountKrw = BigDecimal.ZERO;
                     currentBuyQty = BigDecimal.ZERO;
-                    currentQty = BigDecimal.ZERO;
+                    currentHaveQty = BigDecimal.ZERO;
 
                     // 기존 최종 구간 데이터 초기화 (새로운 구간 시작)
                     finalSellQty = BigDecimal.ZERO;
                     inFinalSegment = true;
                     avgPriceFixed = false;
+                    settlementCount = settlementCount.add(BigDecimal.ONE);
                 } else {
                     // 부분매도: 최종 구간에서 판매수량 누적
                     log.debug("[{}], {} {}개 부분매도 발생", tx.getTradeDate(), tx.getSymbolName(), tx.getQuantity());
-                    if (inFinalSegment) {
+                    if (settlementCount.compareTo(BigDecimal.ZERO) > 0) {
                         finalSellQty = finalSellQty.add(qty);
                     } else {
                         currentSellQty = currentSellQty.add(qty);
@@ -596,7 +605,7 @@ public class DashboardService {
             }
 
             // 현재 보유수량이 있고 전량매도 이후라면 최종 구간 데이터 업데이트
-            if (currentQty.compareTo(BigDecimal.ZERO) > 0 && inFinalSegment) {
+            if (currentHaveQty.compareTo(BigDecimal.ZERO) > 0 && settlementCount.compareTo(BigDecimal.ZERO) > 0) {
                 log.debug("[{}], {} 최종 구간 데이터 업데이트 {} -> {} , {} -> {}", tx.getTradeDate(), tx.getSymbolName(),  finalBuyAmountUsd, currentBuyAmountUsd,  finalBuyQty, currentBuyQty);
                 finalBuyAmountUsd = currentBuyAmountUsd;
                 finalBuyAmountKrw = currentBuyAmountKrw;
@@ -605,7 +614,7 @@ public class DashboardService {
         }
 
         // 최종 구간이 없다면 전체 구간을 최종 구간으로 사용
-        if (!inFinalSegment) {
+        if (settlementCount.compareTo(BigDecimal.ZERO) == 0) {
             log.debug("최종 구간이 없다");
             finalBuyAmountUsd = currentBuyAmountUsd;
             finalBuyAmountKrw = currentBuyAmountKrw;
@@ -620,6 +629,12 @@ public class DashboardService {
         if (finalSellQty.compareTo(BigDecimal.ZERO) > 0 && preSellAvgPriceUsd.compareTo(BigDecimal.ZERO) > 0) {
             investmentUsd = finalBuyAmountUsd.subtract(preSellAvgPriceUsd.multiply(finalSellQty));
             investmentKrw = finalBuyAmountKrw.subtract(preSellAvgPriceKrw.multiply(finalSellQty));
+            log.debug("[{}]투자원금 계산 : {} - ({} * {}) = {} usd",
+                    symbolName,
+                    finalBuyAmountUsd,
+                    preSellAvgPriceUsd,
+                    finalSellQty,
+                    investmentUsd);
         }
 
         // 결과 설정

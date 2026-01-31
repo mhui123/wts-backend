@@ -61,13 +61,9 @@ public class TradeHistoryController {
         return ResponseEntity.ok(summary);
     }
 
-    @GetMapping("/getDashTest")
-    public ResponseEntity<String> getDashSummaryTest(Authentication authentication) {
-        Long actualUserId = jwtUtil.extractUserIdFromAuthentication(authentication);
-        if (actualUserId == null) {
-            return ResponseEntity.badRequest().build();
-        }
-        dashboardService.setDataToPortfolioItem(actualUserId);
+    @GetMapping("/test/getDashTest")
+    public ResponseEntity<String> getDashSummaryTest(@RequestParam(name = "userId") Long userId) {
+        dashboardService.setDataToPortfolioItem(userId);
         return ResponseEntity.ok("OK");
     }
 

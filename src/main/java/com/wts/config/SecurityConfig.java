@@ -75,6 +75,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/kiwoom/authenticate", "/api/kiwoom/public/**", "/api/guest/**").permitAll()
                         // OAuth2 및 인증 관련 경로 공개
                         .requestMatchers("/ws/**", "/actuator/**", "/auth/**", "/oauth2/**", "/login/oauth2/**").permitAll()
+                        .requestMatchers("/api/test/**").permitAll()
                         // 키움 API는 JWT 인증 필요
                         .requestMatchers("/api/kiwoom/**").authenticated()
                         // 기타 API는 인증 필요
