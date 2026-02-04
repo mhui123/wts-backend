@@ -72,13 +72,25 @@ timeout /t 30 /nobreak >nul
 REM 7-1. Python 컨테이너 연결 테스트
 echo.
 echo 7-1. Python 컨테이너 연결 테스트...
-docker exec wts-backend-container curl -s http://wts-python-app:19789/health >nul 2>&1
-if errorlevel 1 (
-    echo [경고] Python 컨테이너 연결 실패!
-    echo - Python 컨테이너가 실행 중인지 확인하세요.
-    echo - 같은 네트워크(wts-backend_wts-network)에 있는지 확인하세요.
+
+REM exec 대상 컨테이너가 실제로 존재하는지 먼저 확인 (없으면 docker exec가 즉시 실패)
+docker ps --format "{{.Names}}" | findstr /R /C:"^wts-backend-container$" >nul
+set "BACKEND_CONTAINER_EXISTS=!errorlevel!"
+
+if not "!BACKEND_CONTAINER_EXISTS!"=="0" (
+    echo [경고] 백엔드 컨테이너(wts-backend-container)를 찾지 못했습니다. docker ps로 이름을 확인하세요.
 ) else (
-    echo [확인] Python 컨테이너 연결 성공!
+    REM curl 응답(JSON 등)이 배치 파서에 섞이지 않도록 stdout/stderr를 완전히 버리고, errorlevel을 즉시 캡처
+    docker exec wts-backend-container curl -s http://wts-python-app:19789/health 1>nul 2>nul
+    set "PY_HEALTH_EXIT=!errorlevel!"
+
+    if "!PY_HEALTH_EXIT!"=="0" (
+        echo [확인] Python 컨테이너 연결 성공!
+    ) else (
+        echo [경고] Python 컨테이너 연결 실패!
+        echo - Python 컨테이너가 실행 중인지 확인하세요.
+        echo - 같은 네트워크(wts-backend_wts-network)에 있는지 확인하세요.
+    )
 )
 
 REM 8. 로그 확인

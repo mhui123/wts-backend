@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.List;
@@ -92,6 +93,7 @@ public class PythonServerService {
     }
 
     public void executePostTaskFireAndForget(String uri, Map<String, Object> params) {
+        Duration fireAndForgetTimeout = Duration.ofSeconds(Math.max(timeoutSeconds,15));
         try {
             pythonWebClient.post()
                     .uri(uri)
@@ -99,10 +101,16 @@ public class PythonServerService {
                     .bodyValue(params != null ? params : Map.of())
                     .retrieve()
                     .bodyToMono(String.class)
-                    .timeout(Duration.ofSeconds(5)) // 짧은 타임아웃
+                    .timeout(fireAndForgetTimeout)
                     .doOnSuccess(result -> log.debug("Fire-and-forget 요청 완료: uri={}", uri))
-                    .doOnError(error -> log.warn("Fire-and-forget 요청 실패: uri={}, error={}", uri, error.getMessage()))
-                    .subscribe(); // 비동기 실행, 응답 무시
+                    .onErrorResume(error -> {
+                        log.warn("Fire-and-forget 요청 실패: uri={}, error={}", uri, error.getMessage());
+                        return Mono.empty();
+                    })
+                    .subscribe(
+                            success -> log.trace("Fire-and-forget 응답: uri={}", uri),
+                            error -> log.debug("예상치 못한 에러 처리: uri={}, error={}", uri, error.getMessage())
+                    );
         } catch (Exception e) {
             log.warn("Fire-and-forget 요청 예외: uri={}, error={}", uri, e.getMessage());
         }

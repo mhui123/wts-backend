@@ -9,7 +9,7 @@ ENV TZ=Asia/Seoul
 
 # 필요한 패키지 설치 (헬스체크 및 디버깅용)
 RUN apt-get update && \
-    apt-get install -y curl netcat-traditional && \
+    apt-get install -y curl netcat-traditional redis-tools && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
