@@ -2,19 +2,20 @@ package com.wts.kiwoom.entity;
 
 import io.netty.handler.codec.socksx.v4.Socks4CommandRequest;
 import jakarta.persistence.*;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 
 import java.time.LocalDateTime;
 
 @Setter
+@Getter
 @Entity
 @Table(name = "kiwoom_audit_logs", indexes = {
         @Index(name = "idx_user_timestamp", columnList = "userId, timestamp"),
         @Index(name = "idx_api_endpoint", columnList = "apiEndpoint")
 })
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class KiwoomAuditLog {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
