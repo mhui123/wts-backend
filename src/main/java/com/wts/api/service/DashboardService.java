@@ -738,4 +738,76 @@ public class DashboardService {
         return pService.executeGetTask("/wpy/getOcilatorData", params);
     }
 
+    public ProcessResult updateClosePriceInfo(Long userId){
+        List<PortfolioItem> pList = pRepo.findByUserId(userId);
+        List<String> tickers = pList.stream()
+                .map(PortfolioItem::getSymbol)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        String symbols = String.join(",", tickers);
+        StockPriceResponseDto dto = pService.getStockPrice(symbols);
+        Map<String, StockInfo> stocks = dto.getStocks();
+
+        for(String key : stocks.keySet()){
+            StockInfo stockInfo = stocks.get(key);
+            for(PortfolioItem p : pList){
+                if(key.equals(p.getSymbol())){
+                    if(stockInfo.getCurrency().equals("USD")){
+                        p.setCurrentPriceUsd(stockInfo.getPrice());
+                    } else if(stockInfo.getCurrency().equals("KRW")){
+                        p.setCurrentPriceKrw(stockInfo.getPrice());
+                    }
+                    pRepo.save(p);
+                }
+            }
+        }
+
+        return ProcessResult.builder()
+                .success(true)
+                .message("종가정보 업데이트 완료. " + userId)
+                .build();
+    }
+
+    public ProcessResult getInOutcomeInfo(Long userId){
+        Optional<List<TradeHistory>> inOpt = thRepository.findByUserIdAndTradeTypeLike(userId, "%환전외화입금");
+        Optional<List<TradeHistory>> divInOpt = thRepository.findByUserIdAndTradeTypeLike(userId, "%배당금입금");
+        Optional<List<TradeHistory>> outOpt = thRepository.findByUserIdAndTradeTypeLike(userId, "%외화출금");
+
+        InoutcomDto dto = new InoutcomDto();
+        inOpt.map(this::convertToDtos).ifPresent(dto::setMoneyIns);
+        divInOpt.map(this::convertToDtos).ifPresent(dto::setDivIns);
+        outOpt.map(this::convertToDtos).ifPresent(dto::setMoneyOuts);
+
+        for(PriceDto pd : dto.getMoneyIns()){
+            dto.addToIncomeSum(pd.getAmountKrw(), pd.getAmountUsd());
+        }
+
+        for(PriceDto pd : dto.getMoneyOuts()){
+            dto.addToOutcomeSum(pd.getAmountKrw(), pd.getAmountUsd());
+        }
+        for(PriceDto pd : dto.getDivIns()){
+            dto.addToDivSum(pd.getAmountKrw(), pd.getAmountUsd());
+        }
+
+        return ProcessResult.builder()
+                .success(true)
+                .message("입출금 금액정보 조회 완료.")
+                .data(dto)
+                .build();
+    }
+
+    private List<PriceDto> convertToDtos(List<TradeHistory> histories) {
+        return histories.stream()
+                .map(this::toPriceDto)
+                .toList();
+    }
+
+    private PriceDto toPriceDto(TradeHistory entity) {
+        return PriceDto.builder()
+                .tradeDate(entity.getTradeDate())
+                .amountKrw(entity.getAmountKrw())
+                .amountUsd(entity.getAmountUsd())
+                .build();
+    }
 }

@@ -1,5 +1,6 @@
 package com.wts.api.repository;
 
+import com.wts.api.entity.PortfolioItem;
 import com.wts.api.entity.TradeHistory;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -57,4 +58,6 @@ public interface TradeHistoryRepository extends JpaRepository<TradeHistory, Long
             java.math.BigDecimal amountKrw,
             java.math.BigDecimal balanceKrw
     );
+
+    Optional<List<TradeHistory>> findByUserIdAndTradeTypeLike(Long userId, String tradeTypePattern);
 }

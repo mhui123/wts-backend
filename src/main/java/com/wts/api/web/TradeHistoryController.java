@@ -67,6 +67,18 @@ public class TradeHistoryController {
         return ResponseEntity.ok("OK");
     }
 
+    @GetMapping("/test/updatePriceTest")
+    public ResponseEntity<ProcessResult> updatePriceTest(@RequestParam(name = "userId") Long userId) {
+        ProcessResult result = dashboardService.updateClosePriceInfo(userId);
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/test/getInoutCom")
+    public ResponseEntity<ProcessResult> getInoutCom(@RequestParam(name = "userId") Long userId) {
+        ProcessResult result = dashboardService.getInOutcomeInfo(userId);
+        return ResponseEntity.ok(result);
+    }
+
     @GetMapping("/syncLatestPortfolioItems")
     public ResponseEntity<ProcessResult> syncLatestPortfolioItems(Authentication authentication) {
         Long actualUserId = jwtUtil.extractUserIdFromAuthentication(authentication);
@@ -110,6 +122,24 @@ public class TradeHistoryController {
             }
 
             ProcessResult result = dashboardService.getOcilatorInfo(ticker, period, interval);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @GetMapping("/getMoneyDetailInfo")
+    public ResponseEntity<ProcessResult> getMoneyDetailInfo(
+            @RequestParam(name = "userId") Long userId,
+            Authentication authentication
+    ) {
+        try {
+            Long actualUserId = jwtUtil.extractUserIdFromAuthentication(authentication);
+            if (actualUserId == null) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            ProcessResult result = dashboardService.getInOutcomeInfo(userId);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.badRequest().build();
