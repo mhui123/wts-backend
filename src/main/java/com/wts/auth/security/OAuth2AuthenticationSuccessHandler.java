@@ -1,9 +1,11 @@
 package com.wts.auth.security;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wts.auth.JwtUtil;
-import com.wts.api.entity.User;
-import com.wts.api.repository.UserRepository;
+import com.wts.auth.jpa.entity.User;
+import com.wts.auth.jpa.repository.UserRepository;
+import jakarta.annotation.Nonnull;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,10 +13,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -29,7 +29,6 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
     private static final Logger log = LoggerFactory.getLogger(OAuth2AuthenticationSuccessHandler.class);
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${app.frontend.success-url:http://localhost:5173}")
     private String frontendSuccessUrl;
@@ -40,7 +39,7 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
     }
 
     @Override
-    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
+    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException {
         try {
             // registrationId: try to call getAuthorizedClientRegistrationId() on the authentication if present
             String registrationId = null;
@@ -53,22 +52,7 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
             }
             if (registrationId == null) registrationId = "unknown";
 
-            Object principal = authentication.getPrincipal();
-            Map<String, Object> attrs = Collections.emptyMap();
-
-            if (principal instanceof Map) {
-                attrs = (Map<String, Object>) principal;
-            } else {
-                try {
-                    Method getAttrs = principal.getClass().getMethod("getAttributes");
-                    Object obj = getAttrs.invoke(principal);
-                    if (obj instanceof Map) {
-                        attrs = (Map<String, Object>) obj;
-                    }
-                } catch (NoSuchMethodException nsme) {
-                    // no getAttributes - leave attrs empty
-                }
-            }
+            Map<String, Object> attrs = getStringObjectMap(authentication);
 
             // Provider user id
             String providerId = attrs.containsKey("sub") ? String.valueOf(attrs.get("sub")) : String.valueOf(attrs.getOrDefault("id", ""));
@@ -124,5 +108,26 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
             log.error("OAuth2 success handler failed", e);
             response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
+    }
+
+    @Nonnull
+    private static Map<String, Object> getStringObjectMap(Authentication authentication) throws IllegalAccessException, InvocationTargetException {
+        Object principal = authentication.getPrincipal();
+        Map<String, Object> attrs = Collections.emptyMap();
+
+        if (principal instanceof Map) {
+            attrs = (Map<String, Object>) principal;
+        } else {
+            try {
+                Method getAttrs = principal.getClass().getMethod("getAttributes");
+                Object obj = getAttrs.invoke(principal);
+                if (obj instanceof Map) {
+                    attrs = (Map<String, Object>) obj;
+                }
+            } catch (NoSuchMethodException nsme) {
+                // no getAttributes - leave attrs empty
+            }
+        }
+        return attrs;
     }
 }

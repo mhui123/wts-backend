@@ -1,0 +1,44 @@
+package com.wts.summary.controller;
+
+import com.wts.summary.dto.TradeHistoryDto;
+import com.wts.auth.JwtUtil;
+import com.wts.summary.service.TradeHistoryService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api")
+@RequiredArgsConstructor
+public class TradeHistoryController {
+
+    private final TradeHistoryService service;
+    private final JwtUtil jwtUtil;
+
+    @GetMapping("/th/getTradesHistoryRenew")
+    public ResponseEntity<List<TradeHistoryDto>> getTradesHistoryRenew(
+            @RequestParam(name = "fromDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam(name = "toDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
+            @RequestParam(name = "tradeType", required = false) String tradeType,
+            @RequestParam(name = "symbolName", required = false) String symbolName,
+            @RequestParam(name = "page", required = false, defaultValue = "0") Integer page,
+            @RequestParam(name = "size", required = false, defaultValue = "100") Integer size,
+            Authentication authentication
+    ) {
+        // JWT 토큰에서 사용자 ID 추출 (게스트 포함)
+        Long actualUserId = jwtUtil.extractUserIdFromAuthentication(authentication);
+        if (actualUserId == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        List<TradeHistoryDto> list = service.getTrades(actualUserId, fromDate, toDate, tradeType, symbolName, page, size);
+        return ResponseEntity.ok(list);
+    }
+}

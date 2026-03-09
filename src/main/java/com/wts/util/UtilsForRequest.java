@@ -1,13 +1,10 @@
 package com.wts.util;
 
-import com.nimbusds.oauth2.sdk.dpop.verifiers.AccessTokenValidationException;
 import com.wts.auth.JwtUtil;
 import com.wts.kiwoom.service.KiwoomTokenManager;
-import com.wts.model.ProcessResult;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
 
@@ -53,9 +50,5 @@ public class UtilsForRequest {
         }
 
         return kiwoomToken.get();
-    }
-
-    public long getUserIdFromJwt(String jwt) {
-        return Long.parseLong(jwtUtil.getSubject(jwt));
     }
 }

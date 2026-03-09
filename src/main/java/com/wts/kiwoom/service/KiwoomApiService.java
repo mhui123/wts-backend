@@ -1,5 +1,6 @@
 package com.wts.kiwoom.service;
 
+import com.wts.api.dto.ProcessResult;
 import com.wts.api.dto.PythonResponseDto;
 import com.wts.api.service.PythonServerService;
 import com.wts.auth.JwtUtil;
@@ -13,7 +14,6 @@ import com.wts.kiwoom.entity.UserWatchListItem;
 import com.wts.kiwoom.repository.KiwoomStockRepository;
 import com.wts.kiwoom.repository.UserWatchGroupRepository;
 import com.wts.kiwoom.repository.UserWatchListItemRepository;
-import com.wts.model.ProcessResult;
 import com.wts.util.MapCaster;
 import com.wts.util.UtilsForRequest;
 import jakarta.transaction.Transactional;
@@ -155,7 +155,7 @@ public class KiwoomApiService {
                     .toList();
             return ProcessResult.builder()
                     .success(true)
-                    .data(stocks)
+                    .data(stockDtos)
                     .message("키움 종목 조회 완료")
                     .build();
         } catch (Exception e) {
@@ -608,41 +608,6 @@ public class KiwoomApiService {
             return ProcessResult.builder()
                     .success(false)
                     .message("관심종목 추가 실패: " + e.getMessage())
-                    .build();
-        }
-    }
-
-    public ProcessResult removeUserWatchListItem(long userId, String groupName, String stockCode) {
-        try {
-            Optional<UserWatchGroup> watchGroupOpt = userWatchGroupRepository.findByUserIdAndGroupName(userId, groupName);
-            if (watchGroupOpt.isEmpty()) {
-                return ProcessResult.builder()
-                        .success(false)
-                        .message("존재하지 않는 그룹입니다: " + groupName)
-                        .build();
-            }
-            UserWatchGroup watchGroup = watchGroupOpt.get();
-
-            Optional<UserWatchListItem> watchItemOpt = userWatchListItemRepository.findByWatchGroupAndStockCd(watchGroup, stockCode);
-            if (watchItemOpt.isEmpty()) {
-                return ProcessResult.builder()
-                        .success(false)
-                        .message("그룹에 존재하지 않는 종목입니다: " + stockCode)
-                        .build();
-            }
-
-            userWatchListItemRepository.delete(watchItemOpt.get());
-
-            return ProcessResult.builder()
-                    .success(true)
-                    .message("관심종목이 삭제되었습니다: " + stockCode)
-                    .build();
-
-        } catch (Exception e) {
-            log.error("관심종목 삭제 실패: userId={}, groupName={}, stockCode={}", userId, groupName, stockCode, e);
-            return ProcessResult.builder()
-                    .success(false)
-                    .message("관심종목 삭제 실패: " + e.getMessage())
                     .build();
         }
     }

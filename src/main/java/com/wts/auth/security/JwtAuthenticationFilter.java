@@ -1,8 +1,9 @@
 package com.wts.auth.security;
 
 import com.wts.auth.JwtUtil;
-import com.wts.api.entity.User;
-import com.wts.api.repository.UserRepository;
+import com.wts.auth.jpa.entity.User;
+import com.wts.auth.jpa.repository.UserRepository;
+import jakarta.annotation.Nonnull;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
@@ -35,7 +36,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+    protected void doFilterInternal(HttpServletRequest request, @Nonnull HttpServletResponse response, @Nonnull FilterChain filterChain)
             throws ServletException, IOException {
         String requestUri = request.getRequestURI();
         log.debug("JWT Filter processing request: {}", requestUri);

@@ -1,10 +1,8 @@
 package com.wts.api.dto;
 
 import com.fasterxml.jackson.annotation.JsonAnySetter;
-import com.wts.model.StockInfo;
 import lombok.*;
 
-import java.util.HashMap;
 import java.util.Map;
 
 @Data
@@ -16,11 +14,4 @@ public class StockPriceResponseDto {
     @JsonAnySetter
     private Map<String, StockInfo> stocks;
 
-    public void setStock(String symbol, StockInfo stockInfo) {
-        stocks.put(symbol, stockInfo);
-    }
-
-    public StockInfo getStock(String symbol) {
-        return stocks.get(symbol);
-    }
 }

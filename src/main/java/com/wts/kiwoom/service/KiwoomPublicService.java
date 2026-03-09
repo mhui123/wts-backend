@@ -1,10 +1,10 @@
 package com.wts.kiwoom.service;
 
+import com.wts.api.dto.ProcessResult;
 import com.wts.api.service.PythonServerService;
 import com.wts.auth.JwtUtil;
 import com.wts.kiwoom.dto.KeyDto;
 import com.wts.kiwoom.entity.KiwoomApiKey;
-import com.wts.model.ProcessResult;
 import com.wts.util.MapCaster;
 import com.wts.util.UtilsForRequest;
 import jakarta.validation.ValidationException;
@@ -25,7 +25,6 @@ public class KiwoomPublicService {
     private final JwtUtil jwtUtil;
     private final MapCaster caster;
     private final KiwoomTokenManager kiwoomTokenManager;
-    private final KiwoomApiService apiService;
     private final UtilsForRequest uRe;
 
     public ProcessResult saveKiwoomKey(Long userId, String appKey, String appSecret) {
@@ -94,6 +93,10 @@ public class KiwoomPublicService {
         }
     }
 
+    /*
+    * 암호화하여 저장된 api 키를 꺼내 복호화 후 파이썬을 통해 키움 api에 접속
+    * 키움 로그인 성공 시, 키움api가 발급한 토큰을 안전하게 저장하고 JWT에는 토큰 참조 ID만 포함하여 반환
+    * */
     public ProcessResult kiwoomLogin(Long userId) {
         try {
             Optional<KiwoomApiKey> apiKeyOpt = keyService.getActiveKey(userId);
@@ -112,7 +115,7 @@ public class KiwoomPublicService {
             Map<String, Object> data = caster.safeMapCast(result.getData());
             String kiwoomToken = caster.safeMapGetString(data, "token");
 
-            // 키움 토큰을 서버에 안전하게 저장
+            // 키움 토큰을 서버에 암호화하여 저장
             String tokenId = kiwoomTokenManager.storeKiwoomToken(userId, kiwoomToken);
             // JWT에는 토큰 참조 ID만 포함
             String jwt = jwtUtil.createTokenWithKiwoomRef(userId, tokenId);

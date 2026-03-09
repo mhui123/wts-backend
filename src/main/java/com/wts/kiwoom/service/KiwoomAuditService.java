@@ -3,7 +3,7 @@ package com.wts.kiwoom.service;
 import com.wts.kiwoom.entity.KiwoomAuditLog;
 import com.wts.kiwoom.entity.KiwoomStatus;
 import com.wts.kiwoom.repository.KiwoomAuditRepository;
-import com.wts.model.ProcessResult;
+import com.wts.api.dto.ProcessResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;

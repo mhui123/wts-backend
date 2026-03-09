@@ -1,28 +1,49 @@
 package com.wts.api.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wts.api.dto.ProcessResult;
 import com.wts.api.dto.PythonResponseDto;
 import com.wts.api.dto.StockPriceResponseDto;
-import com.wts.api.dto.TradeHistoryUploadDto;
 import com.wts.auth.JwtUtil;
 import com.wts.kiwoom.dto.KeyDto;
 import com.wts.kiwoom.dto.WatchListDto;
-import com.wts.model.*;
+import com.wts.summary.dto.TradeHistoryJsonRecord;
+import com.wts.summary.dto.TradeHistoryUploadDto;
+import com.wts.summary.enums.BrokerType;
+import com.wts.summary.jpa.entity.PortfolioItemEntity;
+import com.wts.summary.jpa.entity.SymbolTicker;
+import com.wts.summary.jpa.repository.JpaPortfolioItemRepository;
+import com.wts.summary.jpa.repository.SymbolTickerRepository;
+import com.wts.summary.service.TradeHistoryService;
 import com.wts.util.MapCaster;
+import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -37,17 +58,22 @@ public class PythonServerService {
     private final JwtUtil jwtUtil;
     private final MapCaster caster;
 
+    private final SymbolTickerRepository symbolTickerRepository;
+    private final JpaPortfolioItemRepository jpaPortfolioItemRepository;
+
     public PythonServerService(
             @Qualifier("pythonWebClient") WebClient pythonWebClient,
             @Qualifier("py32WebClient") WebClient py32WebClient,
             TradeHistoryService tService,
             JwtUtil jwtUtil,
-            MapCaster caster) {
+            MapCaster caster, SymbolTickerRepository symbolTickerRepository, JpaPortfolioItemRepository jpaPortfolioItemRepository) {
         this.pythonWebClient = pythonWebClient;
         this.py32WebClient = py32WebClient;
         this.tService = tService;
         this.jwtUtil = jwtUtil;
         this.caster = caster;
+        this.symbolTickerRepository = symbolTickerRepository;
+        this.jpaPortfolioItemRepository = jpaPortfolioItemRepository;
     }
 
     @Value("${external.python-server.timeout:30}")
@@ -114,10 +140,6 @@ public class PythonServerService {
         } catch (Exception e) {
             log.warn("Fire-and-forget 요청 예외: uri={}, error={}", uri, e.getMessage());
         }
-    }
-
-    public ProcessResult executeGetTask(String uri) {
-        return executeGetTask(uri, null);
     }
 
     public ProcessResult executeGetTask(String uri, Map<String, Object> params) {
@@ -218,78 +240,38 @@ public class PythonServerService {
     /**
      * 거래내역을 Python 서버로 업로드 (POST)
      */
-    public ProcessResult uploadTradeHistory(TradeHistoryUploadDto uploadDto) {
+    public ProcessResult uploadTradeHistory(TradeHistoryUploadDto uploadDto, BrokerType brokerType) {
+        String userId = uploadDto.getUserId();
+        Path tempFile = null;
         try {
-            String userId = uploadDto.getUserId();
-            PythonResponseDto response = pythonWebClient.post()
-                    .uri("/wpy/uploadTradeHistory")
-                    .body(BodyInserters.fromMultipartData("file", uploadDto.getFile().getResource())
-                            .with("userId", userId))
-                    .retrieve()
-                    .bodyToMono(PythonResponseDto.class)
-                    .timeout(Duration.ofSeconds(timeoutSeconds))
-                    .doOnError(error -> log.error("Python 서버 uploadTradeHistory 호출 실패: ", error))
-                    .onErrorReturn(createErrorResponse("거래내역 업로드 서버 통신 오류"))
-                    .block();
-
-            if (response != null && response.isSuccess() && response.getData() != null) {
-                // data를 Map으로 캐스팅
-                Map<String, Object> dataMap = caster.safeMapCast(response.getData());
-                String jsonData = (String) dataMap.get("json_data");
-
-                if (jsonData != null) {
-                    // TradeHistory로 변환하여 저장
-                    return tService.saveTradeHistoryFromJson(jsonData, Long.valueOf(userId));
-                } else {
-                    return createErrorProcess("거래내역 데이터가 없습니다.");
-                }
-            } else {
-                String msg = response != null ? (response.getMessage().contains("rolled back") ? "거래내역 중복" : "알 수 없는 오류") : "알 수 없는 오류";
-                return createErrorProcess("거래내역 업로드 실패: " + msg);
+            tempFile = downloadTradeHistoryNdjsonToTempFile(uploadDto, "/wpy/uploadTradeHistory");
+            try (InputStream inputStream = Files.newInputStream(tempFile, StandardOpenOption.READ)) {
+                return tService.saveTradeHistoryFromNdjsonStream(inputStream, Long.valueOf(userId), brokerType);
             }
         } catch (Exception e) {
-            String msg = e.getMessage().contains("rolled back") ? "거래내역 중복" : "알 수 없는 오류";
             log.error("Python 서버 uploadTradeHistory 오류: ", e);
-            return createErrorProcess("거래내역 업로드 실패: " + msg);
+            return createErrorProcess("거래내역 업로드 실패: " + e.getMessage());
+        } finally {
+            deleteTempFile(tempFile);
         }
     }
 
     /**
      * 거래내역을 Python 서버로 업로드 (POST)
      */
-    public ProcessResult uploadKiwoomTradeHistory(TradeHistoryUploadDto uploadDto) {
+    public ProcessResult uploadKiwoomTradeHistory(TradeHistoryUploadDto uploadDto, BrokerType brokerType) {
+        String userId = uploadDto.getUserId();
+        Path tempFile = null;
         try {
-            String userId = uploadDto.getUserId();
-            PythonResponseDto response = pythonWebClient.post()
-                    .uri("/wpy/uploadKiwoomTradeHistory")
-                    .body(BodyInserters.fromMultipartData("file", uploadDto.getFile().getResource())
-                            .with("userId", userId))
-                    .retrieve()
-                    .bodyToMono(PythonResponseDto.class)
-                    .timeout(Duration.ofSeconds(timeoutSeconds))
-                    .doOnError(error -> log.error("Python 서버 uploadTradeHistory 호출 실패: ", error))
-                    .onErrorReturn(createErrorResponse("거래내역 업로드 서버 통신 오류"))
-                    .block();
-
-            if (response != null && response.isSuccess() && response.getData() != null) {
-                // data를 Map으로 캐스팅
-                Map<String, Object> dataMap = caster.safeMapCast(response.getData());
-                String jsonData = (String) dataMap.get("json_data");
-
-                if (jsonData != null) {
-                    // TradeHistory로 변환하여 저장
-                    return tService.saveTradeHistoryFromJson(jsonData, Long.valueOf(userId));
-                } else {
-                    return createErrorProcess("거래내역 데이터가 없습니다.");
-                }
-            } else {
-                String msg = response != null ? (response.getMessage().contains("rolled back") ? "거래내역 중복" : "알 수 없는 오류") : "알 수 없는 오류";
-                return createErrorProcess("거래내역 업로드 실패: " + msg);
+            tempFile = downloadTradeHistoryNdjsonToTempFile(uploadDto, "/wpy/uploadKiwoomTradeHistory");
+            try (InputStream inputStream = Files.newInputStream(tempFile, StandardOpenOption.READ)) {
+                return tService.saveTradeHistoryFromNdjsonStream(inputStream, Long.valueOf(userId), brokerType);
             }
         } catch (Exception e) {
-            String msg = e.getMessage().contains("rolled back") ? "거래내역 중복" : "알 수 없는 오류";
             log.error("Python 서버 uploadTradeHistory 오류: ", e);
-            return createErrorProcess("거래내역 업로드 실패: " + msg);
+            return createErrorProcess("거래내역 업로드 실패: " + e.getMessage());
+        } finally {
+            deleteTempFile(tempFile);
         }
     }
 
@@ -313,39 +295,13 @@ public class PythonServerService {
         }
     }
 
-    public ProcessResult getStockInfo(String stockCd) {
-        String uri = "/kiwoom/stockInfo";
-        try {
-            // JSON 페이로드 구성
-            Map<String, Object> payload = new java.util.HashMap<>();
-            payload.put("stockCd", stockCd);
-
-            PythonResponseDto response = executePostTask(uri, payload);
-
-            if (response != null && response.isSuccess() && response.getData() != null) {
-                Map<String, Object> dataMap = caster.safeMapCast(response.getData());
-
-                return ProcessResult.builder()
-                        .success(true)
-                        .message("주식 정보 조회 성공")
-                        .data(dataMap)
-                        .build();
-            } else {
-                return createErrorProcess("주식 정보 조회 실패: " + (response != null ? response.getMessage() : "알 수 없는 오류"));
-            }
-        } catch (Exception e) {
-            log.error("Python 서버 getStockInfo 오류: ", e);
-            return createErrorProcess("주식 정보 조회 실패: " + e.getMessage());
-        }
-    }
-
     public ProcessResult kiwoomLogin(KeyDto dto) {
         String uri = "/kiwoom/login";
         try {
             String appKey = dto.getAppKey();
             String appSec = dto.getAppSecret();
             // JSON 페이로드 구성
-            Map<String, Object> payload = new java.util.HashMap<>();
+            Map<String, Object> payload = new HashMap<>();
             payload.put("appKey", appKey);
             payload.put("secret", appSec);
 
@@ -378,7 +334,7 @@ public class PythonServerService {
             String appSec = dto.getAppSecret();
             String token = dto.getToken();
             // JSON 페이로드 구성
-            Map<String, Object> payload = new java.util.HashMap<>();
+            Map<String, Object> payload = new HashMap<>();
             payload.put("appKey", appKey);
             payload.put("secret", appSec);
             payload.put("token", token);
@@ -406,7 +362,7 @@ public class PythonServerService {
         String uri = "/kiwoom/stockInfo";
         try {
             // JSON 페이로드 구성
-            Map<String, Object> payload = new java.util.HashMap<>();
+            Map<String, Object> payload = new HashMap<>();
             payload.put("token", token);
             payload.put("stockCodes", stockCodes);
 
@@ -432,7 +388,7 @@ public class PythonServerService {
     public ProcessResult subscribeRealtimeData(String uri, WatchListDto dto, String kiwoomToken){
         long userId = dto.getUserId();
         List<String> stockCodes = dto.getStockCodes();
-        Map<String, Object> payload = new java.util.HashMap<>();
+        Map<String, Object> payload = new HashMap<>();
         payload.put("token", kiwoomToken);
         payload.put("stockCodes", stockCodes);
         payload.put("userId", userId);
@@ -585,6 +541,178 @@ public class PythonServerService {
         } catch (Exception e) {
             log.error("Python 서버 캔들데이터 조회 오류: ", e);
             return createErrorProcess("캔들데이터 조회 실패: " + e.getMessage());
+        }
+    }
+
+    @Transactional
+    public void syncSymbolNameAndTicker(){
+        Optional<List<SymbolTicker>> emptyTickers = symbolTickerRepository.findByTickerIsNull();
+
+        if(emptyTickers.isPresent()){
+            List<String> companyNames = emptyTickers.get().stream().map(SymbolTicker::getSymbolName).toList();
+            Optional<List<PortfolioItemEntity>> l = jpaPortfolioItemRepository.findByCompanyNameInAndSymbolIsNull(companyNames);
+
+            for(SymbolTicker st : emptyTickers.get()){
+                // 티커 정보 업데이트 로직 구현
+                ProcessResult r = getTicker(st.getIsin());
+                String ticker = r.isSuccess() ? r.getMessage() : "";
+                if(ticker != null && !ticker.isEmpty()) {
+                    st.setTicker(ticker);
+
+                    if(l.isPresent()){
+                        l.get().stream()
+                                .filter(item -> item.getCompanyName().equals(st.getSymbolName())).findFirst().ifPresent(pi -> pi.setSymbol(ticker));
+                    }
+                }
+            }
+        } else {
+            Optional<List<PortfolioItemEntity>> symbolNulls = jpaPortfolioItemRepository.findBySymbolIsNull();
+            if(symbolNulls.isPresent()){
+                for(PortfolioItemEntity pi : symbolNulls.get()){
+                    String companyName = pi.getCompanyName();
+                    Optional<SymbolTicker> stOpt = symbolTickerRepository.findBySymbolName(companyName);
+                    if(stOpt.isPresent()){
+                        String isin = stOpt.get().getIsin();
+                        ProcessResult r = getTicker(isin);
+                        String ticker = r.isSuccess() ? r.getMessage() : "";
+                        if(ticker != null && !ticker.isEmpty()) {
+                            pi.setSymbol(ticker);
+                            log.info("심볼 동기화 완료: 회사명='{}', 심볼='{}'", companyName, ticker);
+                        }
+                    }
+                }
+            }
+
+        }
+    }
+
+    public ProcessResult processMultiplesTradeUpload(List<MultipartFile> files, long userId, BrokerType brokerType) throws JsonProcessingException {
+
+        List<String> jsonDataList = files.stream().map(file -> {
+            TradeHistoryUploadDto uploadDto = TradeHistoryUploadDto.builder()
+                    .userId(String.valueOf(userId))
+                    .file(file)
+                    .build();
+            return convertPDFToJson(uploadDto, brokerType);
+        }).toList();
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        List<TradeHistoryJsonRecord> uploadHistories = new ArrayList<>();
+        for(String jsonData : jsonDataList){
+            List<TradeHistoryJsonRecord> histories = objectMapper.readValue(jsonData, new TypeReference<>() {});
+            uploadHistories.addAll(histories);
+        }
+        uploadHistories.sort(Comparator.comparing(TradeHistoryJsonRecord::tradeDate));
+
+        return tService.saveTradeHistoryFromList(uploadHistories, userId, brokerType);
+
+    }
+
+    public String convertPDFToJson(TradeHistoryUploadDto uploadDto, BrokerType broker) {
+        Path tempFile = null;
+        String uri = broker.uploadUri();
+        try {
+            tempFile = downloadTradeHistoryNdjsonToTempFile(uploadDto, uri);
+            try (InputStream inputStream = Files.newInputStream(tempFile, StandardOpenOption.READ)) {
+                return convertNdjsonToJsonArray(inputStream);
+            }
+
+        } catch (Exception e) {
+            log.error("Python 서버 uploadTradeHistory 오류: ", e);
+            throw new RuntimeException("거래내역 json변환 실패: " + e.getMessage());
+        } finally {
+            deleteTempFile(tempFile);
+        }
+    }
+
+    private Path downloadTradeHistoryNdjsonToTempFile(TradeHistoryUploadDto uploadDto, String uri) {
+        String userId = uploadDto.getUserId();
+        Path tempFile;
+        try {
+            tempFile = Files.createTempFile("trade-history-", ".ndjson");
+        } catch (Exception e) {
+            throw new RuntimeException("임시 파일 생성 실패: " + e.getMessage(), e);
+        }
+
+        try (OutputStream outputStream = Files.newOutputStream(
+                tempFile, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+
+            Flux<DataBuffer> dataBuffers = pythonWebClient.post()
+                    .uri(uri)
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .accept(MediaType.valueOf("application/x-ndjson"))
+                    .body(BodyInserters.fromMultipartData("file", uploadDto.getFile().getResource())
+                            .with("userId", userId))
+                    .exchangeToFlux(response -> {
+                        if (response.statusCode().is2xxSuccessful()) {
+                            return response.bodyToFlux(DataBuffer.class);
+                        }
+                        return response.createException().flatMapMany(Flux::error);
+                    })
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
+                    .doOnDiscard(DataBuffer.class, DataBufferUtils::release)
+                    .retryWhen(reactor.util.retry.Retry.backoff(2, Duration.ofMillis(500))
+                            .filter(ex -> ex instanceof reactor.netty.http.client.PrematureCloseException))
+                    .doOnError(error -> log.error("Python 서버 uploadTradeHistory 호출 실패: ", error));
+
+            DataBufferUtils.write(dataBuffers, outputStream)
+                    .then()
+                    .block();
+
+            return tempFile;
+        } catch (Exception e) {
+            deleteTempFile(tempFile);
+            throw new RuntimeException("거래내역 NDJSON 다운로드 실패");
+        }
+    }
+
+    private String convertNdjsonToJsonArray(InputStream inputStream) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            ObjectMapper mapper = new ObjectMapper()
+                    .enable(com.fasterxml.jackson.core.json.JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature());
+            List<TradeHistoryJsonRecord> records = new ArrayList<>();
+
+            String firstLine = reader.readLine();
+            if (firstLine == null) {
+                return "[]";
+            }
+
+            boolean firstLineConsumed = false;
+            try {
+                Map<String, Object> meta = mapper.readValue(firstLine, new TypeReference<>() {});
+                if (meta != null && meta.containsKey("success")) {
+                    firstLineConsumed = true;
+                }
+            } catch (Exception ignore) {
+                // 첫 줄이 메타가 아닐 수 있으므로 아래에서 데이터로 재처리
+            }
+
+            if (!firstLineConsumed) {
+                records.add(mapper.readValue(firstLine, TradeHistoryJsonRecord.class));
+            }
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                records.add(mapper.readValue(line, TradeHistoryJsonRecord.class));
+            }
+
+            return mapper.writeValueAsString(records);
+        } catch (Exception e) {
+            throw new RuntimeException("NDJSON 변환 실패: " + e.getMessage(), e);
+        }
+    }
+
+    private void deleteTempFile(Path tempFile) {
+        if (tempFile == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(tempFile);
+        } catch (Exception e) {
+            log.warn("임시 파일 삭제 실패: {}", tempFile);
         }
     }
 }

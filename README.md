@@ -1,131 +1,291 @@
-# WTS Backend (Spring Boot)
+# WTS Backend
 
-A minimal Spring Boot backend that fronts the Python Kiwoom adapter and fans out real-time quotes to the UI via STOMP WebSocket.
+키움 증권 API를 연동한 실시간 주식 거래 시스템(WTS)의 Spring Boot 백엔드 서버입니다.
 
-## Features
-- WebFlux + WebClient: call Python FastAPI adapter (balance, orders, stocks)
-- STOMP WebSocket: UI subscribes to `/topic/quotes` via `/ws`
-- SSE→STOMP bridge: subscribes to Python SSE `/sse/quotes` and broadcasts to clients
-- Basic security config: currently permitAll (tighten later)
+---
 
-## Project layout
-- `src/main/java/com/wts/WtsApplication.java` – app entry
-- `src/main/java/com/wts/config/WebSocketConfig.java` – STOMP broker config
-- `src/main/java/com/wts/config/SecurityConfig.java` – security (permitAll)
-- `src/main/java/com/wts/api/*` – REST endpoints (`/api/*`)
-- `src/main/java/com/wts/infra/*` – Python adapter client + SSE bridge
-- `src/main/java/com/wts/model/*` – DTOs
-- `src/main/resources/application.yml` – settings
+## 기술 스택
 
-## Configure
-Edit `src/main/resources/application.yml`:
-```yaml
-adapter:
-  base-url: http://localhost:8000   # Python FastAPI base URL
-quotes:
-  codes: "005930,000660"           # optional: auto-subscribe on startup
+| 구분 | 내용 |
+|------|------|
+| Language | Java 17 |
+| Framework | Spring Boot 3.3.4 |
+| Build Tool | Gradle |
+| DB | MySQL 8.0 / H2 (개발용) |
+| Cache / Pub-Sub | Redis 7 (Lettuce) |
+| 인증 | Google OAuth2 + JWT (jjwt 0.11.5) |
+| 실시간 통신 | WebSocket (STOMP), Redis Pub/Sub |
+| 외부 연동 | WebClient (Spring WebFlux) |
+| 보안 | Spring Security, BCrypt, AES 암호화 |
+| 기타 | Spring Data JPA, Querydsl, Lombok, Spring AOP, Spring Actuator |
+
+---
+
+## 주요 기능
+
+### 인증 / 사용자 관리
+- **Google OAuth2 로그인**: Google 계정으로 소셜 로그인, JWT 발급
+- **이메일/비밀번호 로그인**: 자체 회원가입 및 로그인
+- **게스트 모드**: 로그인 없이 대시보드 조회 등 제한적 기능 이용 가능
+- JWT를 HttpOnly 쿠키로 전달하여 XSS 방어
+
+### 대시보드 / 포트폴리오
+- 사용자별 포트폴리오 현황 조회 (`/api/dash/getDashSummary`)
+- 개별 종목 상세 정보 조회 (배당 이력 포함)
+- 포트폴리오 아이템 최신화 (거래 이력 기반 자동 집계)
+- 오실레이터 정보 조회
+
+### 거래 이력 (Trade History)
+- 거래 내역 페이징 조회 (날짜, 종목명, 거래 유형 필터링)
+- NDJSON 형식 거래 내역 파일 업로드 및 파싱
+- 키움, 토스 증권 등 다양한 브로커 유형 지원 (`BrokerType`)
+- 국내/해외 주식 및 통화(`Currency`) 구분 처리
+
+### 현금흐름 (Cashflow)
+- 월별 현금흐름(입출금, 배당 등) 집계 및 조회
+- KRW / USD 통화별 분리 집계
+- 현금흐름 상세 내역 조회
+
+### 키움 API 연동
+- Python FastAPI 어댑터를 통한 키움 REST API 호출
+- 계좌 잔고 조회, 관심종목 관리 (Watch Group / Watch List)
+- API 키 AES 암호화 저장 (`KiwoomKeyService`)
+- 권한 레벨별 API 접근 제어 (`KiwoomPermissionService`)
+- 모든 API 호출에 대한 감사 로그 기록 (`KiwoomAuditService`)
+- 키움 토큰 관리 (`KiwoomTokenManager`)
+- 종목 코드/마켓 동기화
+
+### 실시간 시세
+- Python 서버가 Redis `realtime_price_data` 채널에 시세 Publish
+- `RedisSubscriberService`가 수신 후 WebSocket STOMP로 브로드캐스트
+- 클라이언트는 `/topic/quotes` 구독으로 실시간 데이터 수신
+
+### 스케줄러
+- 매일 새벽 2시: 종목 심볼-티커 매핑 테이블 자동 동기화 (`PortfolioScheduler`)
+
+---
+
+## 아키텍처 구조
+
+```
+[프론트엔드 (React/Vite)]
+        │  REST API / WebSocket (STOMP)
+        ▼
+[WTS Backend (Spring Boot :9789)]
+  ├── Spring Security (JWT + OAuth2)
+  ├── REST Controllers
+  │     ├── /api/account    - 계정 관리
+  │     ├── /api/guest      - 게스트 모드
+  │     ├── /api/dash       - 대시보드 / 포트폴리오
+  │     ├── /api/th         - 거래 이력
+  │     ├── /api/kiwoom     - 키움 API 프록시
+  │     └── /api/kiwoom/auth - 키움 인증
+  ├── WebSocket Broker (/ws → /topic/quotes)
+  └── Redis Subscriber (realtime_price_data)
+        │
+        ├──▶ [MySQL 8.0 :3546]   - 거래 이력, 포트폴리오, 사용자 등 영속 데이터
+        ├──▶ [Redis :6379]       - 실시간 시세 Pub/Sub
+        └──▶ [Python 어댑터 :8000/:19987] - 키움 API 실제 호출
 ```
 
-## Run with Gradle (Windows, cmd)
-Prereqs: Java 17+. If you have Gradle installed, we'll generate a wrapper; otherwise install Gradle or use an existing installation to run the wrapper task once.
+---
 
-- Start Python adapter (example): `uvicorn service:app --port 8000`
-- In another terminal:
-```cmd
-cd d:\projects\toy\kwtool\wts-backend
-gradle wrapper
-gradlew.bat bootRun
+## 패키지 구조
+
+```
+com.wts
+├── api/
+│   ├── dto/          # OrderRequest, StockInfo, PythonRequestDto 등
+│   ├── entity/       # Order (JPA 엔티티)
+│   ├── repository/   # OrderRepository
+│   ├── service/
+│   │   ├── PythonServerService   # Python 어댑터 WebClient 통신
+│   │   └── RedisSubscriberService # Redis → WebSocket 브릿지
+│   └── web/
+│       ├── PythonController
+│       └── TestController
+├── auth/
+│   ├── controller/
+│   │   ├── AccountController   # 로그인, 회원가입, 내 정보
+│   │   └── GuestController     # 게스트 로그인, 대시보드
+│   ├── dto/                    # JwtResponse, RegisterRequest
+│   ├── jpa/
+│   │   ├── entity/User
+│   │   └── repository/UserRepository
+│   ├── security/
+│   │   ├── CustomOAuth2UserService
+│   │   ├── JwtAuthenticationFilter
+│   │   └── OAuth2AuthenticationSuccessHandler
+│   ├── service/
+│   │   ├── AccountService      # 계정 비즈니스 로직
+│   │   └── GuestService        # 게스트 사용자 처리
+│   └── JwtUtil
+├── config/
+│   ├── SecurityConfig          # Spring Security 필터 체인
+│   ├── WebSocketConfig         # STOMP /ws 엔드포인트
+│   ├── WebClientConfig         # Python 어댑터용 WebClient Bean
+│   ├── WebConfig               # MVC 설정
+│   ├── SpaWebConfig            # SPA 정적 리소스 라우팅
+│   ├── RedisConfig             # Redis 연결 및 리스너 설정
+│   └── QuerydslConfig          # Querydsl JPAQueryFactory
+├── kiwoom/
+│   ├── KiwoomApiController     # /api/kiwoom/** REST API
+│   ├── KiwoomAuthController    # 키움 인증 관련 API
+│   ├── dto/                    # KeyDto, WatchListDto, StockDto 등
+│   ├── entity/                 # KiwoomApiKey, KiwoomToken, UserWatchGroup 등
+│   ├── interceptor/            # KiwoomPermissionInterceptor
+│   ├── repository/             # 키움 관련 JPA Repository
+│   └── service/
+│       ├── KiwoomApiService    # 키움 API 비즈니스 로직
+│       ├── KiwoomAuditService  # API 호출 감사 로그
+│       ├── KiwoomKeyService    # API 키 암호화/복호화
+│       ├── KiwoomPermissionService # 권한 레벨 검증
+│       ├── KiwoomPublicService # 인증 불필요 공개 서비스
+│       └── KiwoomTokenManager  # 키움 토큰 수명 관리
+├── model/                      # Money, Quantity, TradeHistoryVO 등 도메인 모델
+├── scheduler/
+│   └── PortfolioScheduler      # 주기적 포트폴리오 동기화
+├── summary/
+│   ├── adapter/                # TradeHistoryNdjsonAdapter
+│   ├── controller/
+│   │   ├── DashboardController
+│   │   └── TradeHistoryController
+│   ├── domain/
+│   │   ├── cashflow/
+│   │   ├── portfolio/          # Portfolio, PortfolioItem
+│   │   └── service/            # CashflowDomainService, TradeHistoryDomainService
+│   ├── dto/                    # DashboardSummaryDto, CashflowDto, TradeHistoryDto 등
+│   ├── enums/                  # BrokerType, Currency, FlowType, FlowCategory 등
+│   ├── jpa/
+│   │   ├── entity/             # TradeHistory, CashflowEntity, PortfolioItemEntity 등
+│   │   └── repository/         # JPA Repository + Specification
+│   ├── mapper/                 # DashboardAssembler
+│   └── service/
+│       ├── CashflowService
+│       ├── DashboardService
+│       └── TradeHistoryService
+└── util/
+    ├── MapCaster               # Map 타입 변환 유틸
+    ├── PortfolioCalculator     # 포트폴리오 수익률 계산
+    └── UtilsForRequest         # 요청 관련 유틸
 ```
 
-Build a jar:
-```cmd
-gradlew.bat clean build -x test
-java -jar build\libs\wts-backend-0.0.1-SNAPSHOT.jar
-```
+---
 
-## Endpoints
-- `GET /api/health` → proxy to Python `/health`
-- `GET /api/account/balance`
-- `POST /api/orders`
-- WebSocket(STOMP): `ws://localhost:8080/ws`, subscribe to `/topic/quotes`
+## 환경 변수 설정
 
-## Next steps
-- Add persistence (orders/fills), idempotency, and risk checks
-- Tighten security (JWT, CSRF for non-API, CORS rules)
-- Map Python responses to typed DTOs and validation
- - If using JPA heavily, prefer Spring MVC over WebFlux or wrap blocking calls on boundedElastic
+애플리케이션 실행 전 아래 환경 변수를 설정해야 합니다.
 
-## 무엇을 만들었나 (파일 목록 및 역할)
-- `src/main/java/com/wts/auth/KiwoomAuthController.java` – 인증 엔드포인트: `POST /auth/kiwoom` (요청 body: `{ "kiwoomToken": "..." }`)을 받아 키움 토큰 검증을 요청하고 내부 JWT를 반환합니다.
-- `src/main/java/com/wts/auth/KiwoomAuthService.java` – 키움 검증 엔드포인트(`kiwoom.validate.url`)로 토큰을 전송하여 유효성을 확인합니다. 응답이 유효하면 `JwtUtil`로 내부 JWT를 생성하여 반환합니다.
-- `src/main/java/com/wts/auth/JwtUtil.java` – 간단한 HS256 방식의 JWT 생성기(프로토타입용). 헤더/페이로드를 직접 조합하고 HMAC-SHA256으로 서명합니다.
-- `src/main/resources/application.yml` – 다음 설정이 추가되었습니다:
-  - `kiwoom.validate.url` : 키움(또는 검증서비스) 토큰 검증 엔드포인트 (예: `http://localhost:9000/validate`)
-  - `app.jwt.secret` : 내부 JWT 서명용 비밀(예시값이 들어있음 — 운영 시 안전하게 관리 필요)
-  - `app.jwt.exp-ms` : 내부 JWT 만료 시간(밀리초)
-- `build.gradle` – JWT 관련 의존(deprecated/실험적 추가)을 포함하도록 수정했습니다. 현재 프로젝트는 내장 JWT 생성기를 사용하도록 구현되어 있습니다.
+| 환경 변수 | 설명 | 예시 |
+|-----------|------|------|
+| `GOOGLE_CLIENT_ID` | Google OAuth2 클라이언트 ID | `xxx.apps.googleusercontent.com` |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth2 클라이언트 시크릿 | `GOCSPX-...` |
+| `KIWOOM_ENCRYPTION_SECRET` | 키움 API 키 암호화 비밀키 (최소 32자) | `your-32-character-secret-key!!` |
+| `KIWOOM_ENCRYPTION_SALT` | 암호화 Salt (32자리 HEX) | `0123456789abcdef0123456789abcdef` |
+| `SPRING_DATA_REDIS_HOST` | Redis 호스트 (기본값: localhost) | `localhost` |
+| `SPRING_DATA_REDIS_PORT` | Redis 포트 (기본값: 6379) | `6379` |
+| `EXTERNAL_PYTHON_SERVER_BASE_URL` | Python 어댑터 URL | `http://localhost:8000` |
+| `EXTERNAL_PYTHON_SERVER_PY32_URL` | Python 32비트 어댑터 URL | `http://localhost:19987` |
 
-## 주의 및 권장 개선사항 (중요)
-- 비밀 관리: `app.jwt.secret` 값을 소스나 리포지토리에 두지 마십시오. 운영환경에서는 환경변수 또는 Vault 같은 비밀관리 솔루션을 사용하세요.
-- 서명 검증 우선: 키움이 서명된 토큰(공개키로 검증 가능한 JWT 등)을 제공하면 서버는 서명을 직접 검증하는 방식으로 구현하는 것이 가장 안전합니다. (검증 API 호출보다 더 신뢰할 수 있음)
-- 검증 API 스펙: 현재 `KiwoomAuthService`는 `POST { "token": "..." }` 형태로 `kiwoom.validate.url`에 요청을 보내고, `{ "valid": true, "userId": "..." }`와 같은 응답을 기대합니다. 실제 키움 검증 엔드포인트의 스펙에 맞춰 요청/응답 파싱을 조정하세요.
-- 라이브러리 사용: 프로덕션에서는 자체 JWT 구현 대신 검증된 라이브러리(e.g. jjwt, nimbus-jose-jwt)를 사용하세요. 키 길이, 알고리즘, 클레임 검증 등 보안 고려사항이 많습니다.
-- 통신 보안: 클라이언트↔서버, 서버↔키움(검증서비스) 간 통신은 항상 TLS(HTTPS)로 보호하세요.
-- 토큰 수명 및 리프레시: 내부 JWT 만료시간과 리프레시/폐기 정책(블랙리스트 등)을 설계하세요. 단기간 토큰과 리프레시 토큰 조합이 일반적입니다.
-- 로깅 민감정보 주의: 원본 키움 토큰이나 민감 클레임은 로그에 남기지 마십시오.
-- 테스트/모킹: 개발 환경에서 `kiwoom.validate.url`은 키움 대신 간단한 목 서버로 대체하여 테스트하세요(예: `{ "valid": true, "userId": "kiwoom-123" }`).
+---
 
-## 환경변수로 JWT 비밀 설정 (권장)
+## 로컬 개발 환경 실행
 
-프로덕션에서는 `app.jwt.secret`을 리포지토리나 소스에 두지 않고 비밀관리(환경변수/시크릿스토어)를 통해 주입해야 합니다.
+### 사전 준비
+- Java 17+
+- MySQL 8.0 (포트 3546, DB명: `stockdb`)
+- Redis 7+ (포트 6379)
+- Python FastAPI 어댑터 서버 실행 중
 
-이 프로젝트는 다음 우선순위로 JWT 비밀을 읽습니다:
-1. 환경변수 `APP_JWT_SECRET` (우선)
-2. `application.yml`의 `app.jwt.secret`
-3. 하드코딩된 기본값(개발용, 권장하지 않음)
+### 실행 방법
 
-아래는 몇 가지 실행/배포 환경에서의 설정 예시입니다.
-
-- Windows (cmd.exe):
-```cmd
-set APP_JWT_SECRET=your-very-secret-value
-cd D:\projects\toy\kwtool\wts-backend
-gradlew.bat bootRun
-```
-
-- Windows PowerShell:
 ```powershell
-$env:APP_JWT_SECRET = "your-very-secret-value"
-cd D:\projects\toy\kwtool\wts-backend
-.\gradlew.bat bootRun
-```
+# 환경 변수 설정 (PowerShell)
+$env:GOOGLE_CLIENT_ID = "your-client-id"
+$env:GOOGLE_CLIENT_SECRET = "your-client-secret"
+$env:KIWOOM_ENCRYPTION_SECRET = "your-32-character-secret-key!!"
+$env:KIWOOM_ENCRYPTION_SALT = "0123456789abcdef0123456789abcdef"
 
-- Linux / macOS (bash):
-```bash
-export APP_JWT_SECRET=your-very-secret-value
+# 애플리케이션 실행
 ./gradlew bootRun
 ```
 
-- Docker (환경변수 주입):
-```bash
-docker run -e APP_JWT_SECRET=your-very-secret-value -p 8080:8080 your-image:tag
+서버 기동 후 `http://localhost:9789` 에서 프론트엔드 정적 리소스 및 API를 제공합니다.
+
+---
+
+## Docker 실행
+
+```powershell
+# 이미지 빌드
+docker build -t wts-backend:latest .
+
+# .env 파일 생성 후 실행
+docker-compose up -d
 ```
 
-- Kubernetes (Secret을 사용한 예시, 간단화):
-1) Secret 생성:
-```bash
-kubectl create secret generic wts-secret --from-literal=APP_JWT_SECRET=your-very-secret-value
-```
-2) Deployment의 컨테이너에 envFrom으로 주입:
-```yaml
-envFrom:
-  - secretRef:
-      name: wts-secret
+`docker-compose.yml`은 Redis 컨테이너를 포함합니다.  
+MySQL과 Python 서버는 호스트(`host.docker.internal`) 또는 외부 네트워크(`wts-backend_wts-network`)를 통해 연결합니다.
+
+---
+
+## 주요 API 엔드포인트
+
+### 인증
+| Method | URL | 설명 |
+|--------|-----|------|
+| `POST` | `/api/account/login` | 이메일/비밀번호 로그인, JWT 쿠키 발급 |
+| `POST` | `/api/account/register` | 회원가입 |
+| `GET`  | `/api/account/getMyInfo` | 내 계정 정보 조회 |
+| `POST` | `/api/guest/login` | 게스트 로그인, JWT 발급 |
+| `GET`  | `/login/oauth2/code/google` | Google OAuth2 콜백 (자동 처리) |
+
+### 대시보드 / 포트폴리오
+| Method | URL | 설명 |
+|--------|-----|------|
+| `GET` | `/api/dash/getDashSummary` | 포트폴리오 대시보드 요약 |
+| `GET` | `/api/dash/syncLatestPortfolioItems` | 포트폴리오 최신화 |
+| `GET` | `/api/dash/getStockDetailInfo` | 개별 종목 상세 (배당 포함) |
+| `GET` | `/api/dash/getOcilatorInfo` | 오실레이터 정보 |
+
+### 거래 이력
+| Method | URL | 설명 |
+|--------|-----|------|
+| `GET` | `/api/th/getTradesHistoryRenew` | 거래 이력 페이징 조회 |
+
+### 키움 API
+| Method | URL | 설명 |
+|--------|-----|------|
+| `POST` | `/api/kiwoom/account/balance` | 계좌 잔고 조회 |
+| `*` | `/api/kiwoom/**` | 키움 API 프록시 (권한 레벨 필요) |
+
+### WebSocket
+| Endpoint | 설명 |
+|----------|------|
+| `ws://host/ws` | STOMP 연결 엔드포인트 |
+| `/topic/quotes` | 실시간 시세 구독 주소 |
+
+---
+
+## 보안 정책
+
+- `/`, `/login`, `/assets/**` 등 정적 리소스: **인증 불필요**
+- `/api/guest/**`: 게스트 접근 허용
+- `/api/**`: **JWT 인증 필요**
+- `/api/kiwoom/**`: **키움 권한 레벨** 추가 검증 (`@PreAuthorize`)
+- CORS: `http://localhost:5173`, `http://localhost:19789` 허용 (개발 환경)
+- JWT는 HttpOnly + Secure + SameSite=None 쿠키로 전달
+- 키움 API 키: AES 암호화 후 DB 저장
+
+---
+
+## 테스트
+
+```powershell
+./gradlew test
 ```
 
-주의사항:
-- 비밀 값은 가능한 한 긴(예: 32바이트 이상의 랜덤값) 문자열을 사용하고 안전하게 관리하세요.
-- CI/CD 파이프라인에 비밀을 노출하지 않도록 주의하세요(시크릿 매니저 사용 권장).
-- `application.yml`의 예시값은 개발 편의를 위한 것으로, 운영환경에서는 사용하지 마세요.
+- 테스트 리포트: `build/reports/tests/test/index.html`
+- 단위 테스트: JUnit 5 + Mockito
+- MockWebServer를 이용한 WebClient 통합 테스트 지원
 
-(이하 기존 README 내용 유지)

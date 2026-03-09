@@ -2,21 +2,22 @@
 // 주요 책임: Spring Security 필터 체인 구성
 package com.wts.config;
 
+import com.wts.auth.JwtUtil;
+import com.wts.auth.jpa.repository.UserRepository;
+import com.wts.auth.security.CustomOAuth2UserService;
+import com.wts.auth.security.JwtAuthenticationFilter;
+import com.wts.auth.security.OAuth2AuthenticationSuccessHandler;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-
-import com.wts.auth.JwtUtil;
-import com.wts.auth.security.CustomOAuth2UserService;
-import com.wts.auth.security.OAuth2AuthenticationSuccessHandler;
-import com.wts.auth.security.JwtAuthenticationFilter;
-import com.wts.api.repository.UserRepository;
-
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -25,7 +26,7 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity(prePostEnabled = true)
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private final OAuth2AuthenticationSuccessHandler successHandler;
@@ -63,9 +64,14 @@ public class SecurityConfig {
     }
 
     @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(csrf -> csrf.disable())
+                .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
                         // 정적 리소스 (프론트엔드 빌드 결과물) 공개
@@ -75,6 +81,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/kiwoom/authenticate", "/api/kiwoom/public/**", "/api/guest/**").permitAll()
                         // OAuth2 및 인증 관련 경로 공개
                         .requestMatchers("/ws/**", "/actuator/**", "/auth/**", "/oauth2/**", "/login/oauth2/**").permitAll()
+                                .requestMatchers("/api/account/**").permitAll()
                         .requestMatchers("/api/test/**").permitAll()
 //                        .requestMatchers( "kiwoom-api", "trade-history", "upload").permitAll()
                         // 키움 API는 JWT 인증 필요

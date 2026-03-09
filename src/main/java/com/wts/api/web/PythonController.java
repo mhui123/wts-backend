@@ -1,10 +1,11 @@
 package com.wts.api.web;
 
+import com.wts.api.dto.ProcessResult;
 import com.wts.api.dto.StockPriceResponseDto;
-import com.wts.api.dto.TradeHistoryUploadDto;
+import com.wts.summary.dto.TradeHistoryUploadDto;
+import com.wts.summary.enums.BrokerType;
+import com.wts.summary.service.TradeHistoryService;
 import com.wts.auth.JwtUtil;
-import com.wts.model.*;
-import com.wts.api.service.DashboardService;
 import com.wts.api.service.PythonServerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/python")
 @RequiredArgsConstructor
@@ -21,7 +24,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class PythonController {
 
     private final PythonServerService pythonServerService;
-    private final DashboardService dService;
+    private final TradeHistoryService tService;
     private final JwtUtil jwtUtil;
 
     /**
@@ -66,6 +69,7 @@ public class PythonController {
     @PostMapping(value = "/uploadTradeHistory", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ProcessResult> uploadTradeHistory(
             @RequestPart("file") MultipartFile file,
+            @RequestPart("brokerType") BrokerType broker,
             Authentication authentication) {
 
         try {
@@ -81,9 +85,9 @@ public class PythonController {
                     .build();
 
             // Python 서버에서 JSON 데이터 받아오기
-            ProcessResult response = pythonServerService.uploadTradeHistory(uploadDto);
+            ProcessResult response = pythonServerService.uploadTradeHistory(uploadDto, broker);
             if(response.isSuccess()){
-                dService.setDataToPortfolioItem(userId); //portfolioItem 최신화
+                tService.summarizeTradeHistoryAsEachStocks(userId, broker);
             }
 
             return ResponseEntity.ok(response);
@@ -100,6 +104,7 @@ public class PythonController {
     @PostMapping(value = "/uploadKiwoomTradeHistory", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ProcessResult> uploadKiwoomTradeHistory(
             @RequestPart("file") MultipartFile file,
+            @RequestPart("brokerType") BrokerType broker,
             Authentication authentication) {
 
         try {
@@ -115,9 +120,9 @@ public class PythonController {
                     .build();
 
             // Python 서버에서 JSON 데이터 받아오기
-            ProcessResult response = pythonServerService.uploadKiwoomTradeHistory(uploadDto);
+            ProcessResult response = pythonServerService.uploadKiwoomTradeHistory(uploadDto, broker);
             if(response.isSuccess()){
-                dService.setDataToPortfolioItem(userId); //portfolioItem 최신화
+                tService.summarizeTradeHistoryAsEachStocks(userId, broker);
             }
 
             return ResponseEntity.ok(response);
@@ -155,4 +160,35 @@ public class PythonController {
         }
     }
 
+    /**
+     * 거래 내역을 Python 서버로 업로드
+     */
+    @PostMapping(value = "/uploadMultiplesTradeHistory", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ProcessResult> uploadMultiplesTradeHistory(
+            @RequestPart("files") List<MultipartFile> files,
+            @RequestPart("brokerType") BrokerType brokerType,
+            Authentication authentication) {
+
+        try {
+            // DTO 생성
+            Long userId = jwtUtil.extractUserIdFromAuthentication(authentication);
+            if (userId == null) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            ProcessResult response = pythonServerService.processMultiplesTradeUpload(files, userId, brokerType);
+
+            if(response.isSuccess()){
+                tService.summarizeTradeHistoryAsEachStocks(userId, brokerType);
+            }
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("거래내역 업로드 실패: ", e);
+            ProcessResult errorResponse = ProcessResult.builder()
+                    .success(false)
+                    .message("거래내역 업로드 실패: " + e.getMessage())
+                    .build();
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
 }

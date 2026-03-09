@@ -1,11 +1,10 @@
 package com.wts.kiwoom;
 
+import com.wts.api.dto.ProcessResult;
 import com.wts.kiwoom.dto.KiwoomApiRequest;
 import com.wts.kiwoom.dto.WatchListDto;
 import com.wts.kiwoom.service.KiwoomApiService;
-import com.wts.kiwoom.service.KiwoomPublicService;
 import com.wts.kiwoom.service.KiwoomAuditService;
-import com.wts.model.ProcessResult;
 import com.wts.util.UtilsForRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +13,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/kiwoom")
@@ -27,7 +25,7 @@ public class KiwoomApiController {
     // 조회 권한만 있으면 호출 가능
     @PostMapping("/account/balance")
     @PreAuthorize("@kiwoomPermissionService.hasPermission(authentication.id, 'BASIC_USER')")
-    public ResponseEntity<?> getAccountBalance(HttpServletRequest request, @RequestBody KiwoomApiRequest req){
+    public ResponseEntity<?> getAccountBalance(@RequestBody KiwoomApiRequest req){
         long startTime = System.currentTimeMillis();
 
         try {
@@ -64,24 +62,17 @@ public class KiwoomApiController {
         }
     }
 
-//    // 거래 권한이 있어야 호출 가능
-//    @PostMapping("/trade/order")
-//    @PreAuthorize("@kiwoomPermissionService.hasPermission(authentication.name, 'TRADING_USER')")
-//    public ResponseEntity<?> placeOrder(@RequestBody OrderRequest request) {
-//        // 주문 실행
-//    }
-//
     // 관리자만 호출 가능
     @PostMapping("/admin/setStockCodes")
-//    @PreAuthorize("@kiwoomPermissionService.hasPermission(authentication.name, 'ADMIN_USER')")
-    public ResponseEntity<?> syncStockCdsWithMarket(HttpServletRequest request) {
+    @PreAuthorize("@kiwoomPermissionService.hasPermission(authentication.name, 'ADMIN_USER')")
+    public ResponseEntity<?> syncStockCdsWithMarket() {
         ProcessResult result = apiService.syncKiwoomStocks();
         return ResponseEntity.ok().body(result);
     }
 
 
     @GetMapping("/stocks/master")
-    public ResponseEntity<?> getAllStockCodeName(HttpServletRequest request){
+    public ResponseEntity<?> getAllStockCodeName(){
         try {
             ProcessResult result = apiService.getAllStockCodeName();
             return ResponseEntity.ok().body(result);
@@ -93,8 +84,7 @@ public class KiwoomApiController {
 
     @GetMapping("/watchList/groups/{userId}")
     @PreAuthorize("@kiwoomPermissionService.hasPermission(#userId, 'BASIC_USER')")
-    public ResponseEntity<?> getUserWatchListGroups(HttpServletRequest request,
-                                                    @PathVariable long userId){
+    public ResponseEntity<?> getUserWatchListGroups(HttpServletRequest request){
         try {
             String jwt;
             jwt = uRe.attractJwtFromRequest(request);
@@ -111,8 +101,7 @@ public class KiwoomApiController {
     }
 
     @PostMapping("/watchlist/add")
-    public ResponseEntity<?> addUserWatchListItem(HttpServletRequest request,
-                                                  @RequestBody WatchListDto dto){
+    public ResponseEntity<?> addUserWatchListItem(@RequestBody WatchListDto dto){
         try {
             long userId = dto.getUserId();
             List<String> stockCodes = dto.getStockCodes();
@@ -129,8 +118,7 @@ public class KiwoomApiController {
     @PostMapping("/watchlist/syncgroups/{userId}")
     @PreAuthorize("@kiwoomPermissionService.hasPermission(#userId, 'BASIC_USER')")
     public ResponseEntity<?> syncWatchGroup(@PathVariable String userId,
-                                            @RequestBody WatchListDto dto,
-                                            HttpServletRequest httpRequest) {
+                                            @RequestBody WatchListDto dto) {
         long startTime = System.currentTimeMillis();
         String groupName = dto.getGroupName();
         long longUserId = Long.parseLong(userId);
@@ -169,8 +157,7 @@ public class KiwoomApiController {
     @DeleteMapping("/watchlist/delgroups/{userId}/{groupId}")
     @PreAuthorize("@kiwoomPermissionService.hasPermission(#userId, 'BASIC_USER')")
     public ResponseEntity<?> deleteWatchGroup(@PathVariable String userId,
-                                              @PathVariable String groupId,
-                                              HttpServletRequest httpRequest) {
+                                              @PathVariable String groupId) {
         long startTime = System.currentTimeMillis();
         long longGroupId = Long.parseLong(groupId);
         long longUserId = Long.parseLong(userId);
@@ -205,8 +192,8 @@ public class KiwoomApiController {
 
     @PostMapping("/realtime/subscribe/{userId}")
     @PreAuthorize("@kiwoomPermissionService.hasPermission(#userId, 'BASIC_USER')")
-    public ResponseEntity<?> subscribePriceData(@PathVariable String userId, @RequestBody WatchListDto dto, HttpServletRequest request) {
-        long startTime = System.currentTimeMillis();
+    public ResponseEntity<?> subscribePriceData(@RequestBody WatchListDto dto, HttpServletRequest request) {
+//        long startTime = System.currentTimeMillis();
 
         String jwt = uRe.attractJwtFromRequest(request);
         if( jwt == null) {
@@ -217,7 +204,7 @@ public class KiwoomApiController {
         try {
             ProcessResult result = apiService.reqRealTimeData(jwt, dto, "subscribe");
 
-            long executionTime = System.currentTimeMillis() - startTime;
+//            long executionTime = System.currentTimeMillis() - startTime;
 //            auditService.logApiRequest(
 //                    longUserId,
 //                    "/api/kiwoom/users/" + userId + "/watchlist/groups/" + groupName,
@@ -228,7 +215,7 @@ public class KiwoomApiController {
             return ResponseEntity.ok().body(result);
 
         } catch (Exception e) {
-            ProcessResult result = ProcessResult.failure("관심종목 그룹 동기화 실패: " + e.getMessage());
+            ProcessResult result = ProcessResult.failure("처리 오류: " + e.getMessage());
 
 //            long executionTime = System.currentTimeMillis() - startTime;
 //            auditService.logApiRequest(
@@ -238,14 +225,14 @@ public class KiwoomApiController {
 //                    result
 //            );
 
-            return ResponseEntity.internalServerError().body("처리 중 오류가 발생했습니다.");
+            return ResponseEntity.internalServerError().body(result);
         }
     }
 
     @PostMapping("/realtime/unsubscribe/{userId}")
     @PreAuthorize("@kiwoomPermissionService.hasPermission(#userId, 'BASIC_USER')")
-    public ResponseEntity<?> unsubscribePriceData(@PathVariable String userId, @RequestBody WatchListDto dto, HttpServletRequest request) {
-        long startTime = System.currentTimeMillis();
+    public ResponseEntity<?> unsubscribePriceData(@RequestBody WatchListDto dto, HttpServletRequest request) {
+//        long startTime = System.currentTimeMillis();
 
         String jwt = uRe.attractJwtFromRequest(request);
         if( jwt == null) {
@@ -256,7 +243,7 @@ public class KiwoomApiController {
         try {
             ProcessResult result = apiService.reqRealTimeData(jwt, dto, "unsubscribe");
 
-            long executionTime = System.currentTimeMillis() - startTime;
+//            long executionTime = System.currentTimeMillis() - startTime;
 //            auditService.logApiRequest(
 //                    longUserId,
 //                    "/api/kiwoom/users/" + userId + "/watchlist/groups/" + groupName,
@@ -267,7 +254,7 @@ public class KiwoomApiController {
             return ResponseEntity.ok().body(result);
 
         } catch (Exception e) {
-            ProcessResult result = ProcessResult.failure("관심종목 그룹 동기화 실패: " + e.getMessage());
+            ProcessResult result = ProcessResult.failure("처리 오류: " + e.getMessage());
 
 //            long executionTime = System.currentTimeMillis() - startTime;
 //            auditService.logApiRequest(
@@ -277,7 +264,7 @@ public class KiwoomApiController {
 //                    result
 //            );
 
-            return ResponseEntity.internalServerError().body("처리 중 오류가 발생했습니다.");
+            return ResponseEntity.internalServerError().body(result);
         }
     }
 }

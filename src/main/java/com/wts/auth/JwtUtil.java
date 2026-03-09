@@ -1,6 +1,6 @@
 package com.wts.auth;
 
-import com.wts.api.entity.User;
+import com.wts.auth.jpa.entity.User;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;

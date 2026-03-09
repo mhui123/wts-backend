@@ -1,14 +1,12 @@
 package com.wts.kiwoom;
 
-import com.wts.api.entity.User;
+import com.wts.api.dto.ProcessResult;
 import com.wts.api.service.PythonServerService;
 import com.wts.auth.JwtUtil;
 import com.wts.auth.dto.JwtResponse;
 import com.wts.kiwoom.dto.KiwoomApiRequest;
 import com.wts.kiwoom.dto.KiwoomTokenRequest;
 import com.wts.kiwoom.service.KiwoomPublicService;
-import com.wts.kiwoom.service.KiwoomTokenManager;
-import com.wts.model.ProcessResult;
 import com.wts.util.UtilsForRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -50,7 +48,7 @@ public class KiwoomAuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<ProcessResult> kiwoomLogin(@RequestBody KiwoomApiRequest req, Authentication authentication) {
+    public ResponseEntity<ProcessResult> kiwoomLogin(Authentication authentication) {
         Long userId = jwtUtil.extractUserIdFromAuthentication(authentication);
         log.info("키움 로그인 요청: userId={}", userId);
         try {

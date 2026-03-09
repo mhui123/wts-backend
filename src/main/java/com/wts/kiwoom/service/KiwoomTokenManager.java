@@ -9,10 +9,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,6 +32,10 @@ public class KiwoomTokenManager {
 
     @Value("${kiwoom.token.ttl-minutes:1440}")
     private int tokenTtlMinutes;
+
+    private static final String ALGORITHM = "AES/GCM/NoPadding"; // GCM 모드로 보안 강화 (IV와 인증 태그 필요)
+    private static final int IV_LENGTH = 12; // GCM 권장 12 bytes
+    private static final int TAG_LENGTH = 128; // 인증 태그 128bit
 
     /**
      * 키움 토큰을 데이터베이스에 안전하게 저장
@@ -129,32 +136,55 @@ public class KiwoomTokenManager {
      * 키움 토큰 암호화 (SHA-256 기반 키 생성)
      */
     private String encryptToken(String token) throws Exception {
-        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+        Cipher cipher = Cipher.getInstance(ALGORITHM);
 
         // SHA-256으로 항상 32바이트 키 생성
         MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
         byte[] keyBytes = sha256.digest(encryptionKey.getBytes(StandardCharsets.UTF_8));
         SecretKeySpec keySpec = new SecretKeySpec(keyBytes, "AES");
-
         cipher.init(Cipher.ENCRYPT_MODE, keySpec);
+
+        // random IV 생성
+        byte[] iv = new byte[IV_LENGTH];
+        SecureRandom secureRandom = new SecureRandom();
+        secureRandom.nextBytes(iv);
+
+        GCMParameterSpec gcmParameterSpec = new GCMParameterSpec(TAG_LENGTH, iv);
+        cipher.init(Cipher.ENCRYPT_MODE, keySpec, gcmParameterSpec);
+
+        // IV 암호문 결합
         byte[] encrypted = cipher.doFinal(token.getBytes(StandardCharsets.UTF_8));
-        return Base64.getEncoder().encodeToString(encrypted);
+        byte[] combined = new byte[IV_LENGTH + encrypted.length];
+        System.arraycopy(iv, 0, combined, 0, IV_LENGTH);
+        System.arraycopy(encrypted, 0, combined, IV_LENGTH, encrypted.length);
+
+        return Base64.getEncoder().encodeToString(combined);
     }
 
     /**
      * 키움 토큰 복호화 (SHA-256 기반 키 생성)
      */
     private String decryptToken(String encryptedToken) throws Exception {
-        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
 
-        // SHA-256으로 항상 32바이트 키 생성 (암호화와 동일한 방식)
+        Cipher cipher = Cipher.getInstance(ALGORITHM);
+
+        // 1️⃣ 키 생성 (암호화와 동일)
         MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
         byte[] keyBytes = sha256.digest(encryptionKey.getBytes(StandardCharsets.UTF_8));
         SecretKeySpec keySpec = new SecretKeySpec(keyBytes, "AES");
 
-        cipher.init(Cipher.DECRYPT_MODE, keySpec);
         byte[] decoded = Base64.getDecoder().decode(encryptedToken);
-        byte[] decrypted = cipher.doFinal(decoded);
+
+        // 2️⃣ IV 분리
+        byte[] iv = Arrays.copyOfRange(decoded, 0, IV_LENGTH);
+        byte[] encrypted = Arrays.copyOfRange(decoded, IV_LENGTH, decoded.length);
+
+        GCMParameterSpec gcmSpec = new GCMParameterSpec(TAG_LENGTH, iv);
+
+        cipher.init(Cipher.DECRYPT_MODE, keySpec, gcmSpec);
+
+        byte[] decrypted = cipher.doFinal(encrypted);
+
         return new String(decrypted, StandardCharsets.UTF_8);
     }
 }
