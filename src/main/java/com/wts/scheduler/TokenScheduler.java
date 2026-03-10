@@ -19,7 +19,6 @@ public class TokenScheduler {
     public void cleanupExpiredTokens() {
         log.info("[Scheduler] cleanupExpiredTokens started");
         kiwoomTokenManager.cleanupExpiredTokens();
-        guestService.cleanupExpiredGuests();
         log.info("[Scheduler] cleanupExpiredTokens finished");
     }
 //

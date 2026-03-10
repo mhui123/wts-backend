@@ -1,9 +1,9 @@
 package com.wts.auth.service;
 
-import com.wts.auth.jpa.entity.User;
-import com.wts.auth.jpa.repository.UserRepository;
 import com.wts.auth.JwtUtil;
 import com.wts.auth.dto.JwtResponse;
+import com.wts.auth.jpa.entity.User;
+import com.wts.auth.jpa.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -52,12 +52,6 @@ public class GuestService {
 
 
         return guest;
-    }
-
-    @Transactional
-    public void cleanupExpiredGuests() {
-        LocalDateTime expiredTime = LocalDateTime.now().minusHours(24);
-        userRepository.deleteByProviderAndCreatedAtBefore("guest", expiredTime);
     }
 
     public void setGuestAuthentication(User guestUser) {

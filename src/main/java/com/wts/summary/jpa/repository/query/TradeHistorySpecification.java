@@ -38,7 +38,7 @@ public class TradeHistorySpecification {
             }
 
             if (condition.getBrokerType() != null) {
-                predicates.add(cb.equal(root.get("brokerType"), condition.getBrokerType()));
+                predicates.add(cb.equal(root.get("brokerName"), condition.getBrokerType()));
             }
 
             if (condition.getTradeDate() != null) {

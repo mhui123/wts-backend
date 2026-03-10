@@ -245,16 +245,22 @@ public class TradeHistoryService {
     }
 
     public List<TradeHistory> getHistoryWithinConditions(TradeSearchCondition condition) {
-        if (condition.getPage() != null && condition.getSize() != null) {
-            int p = Math.max(0, condition.getPage());
-            int s = Math.max(1, condition.getSize());
-            Sort sort = Sort.by(Sort.Order.desc("tradeDate"), Sort.Order.desc("trHistId"));
-            Pageable pageable = PageRequest.of(p, s, sort);
-            Page<TradeHistory> pg = repository.findAll(TradeHistorySpecification.withCondition(condition), pageable);
-            return pg.getContent();
-        } else {
-            return repository.findAll(TradeHistorySpecification.withCondition(condition));
+        try {
+            if (condition.getPage() != null && condition.getSize() != null) {
+                int p = Math.max(0, condition.getPage());
+                int s = Math.max(1, condition.getSize());
+                Sort sort = Sort.by(Sort.Order.desc("tradeDate"), Sort.Order.desc("trHistId"));
+                Pageable pageable = PageRequest.of(p, s, sort);
+                Page<TradeHistory> pg = repository.findAll(TradeHistorySpecification.withCondition(condition), pageable);
+                return pg.getContent();
+            } else {
+                return repository.findAll(TradeHistorySpecification.withCondition(condition));
+            }
+        } catch(Exception e){
+            log.error("거래내역 조회 실패: ", e);
+            throw e;
         }
+
     }
 
 //    public Optional<TradeHistory> getHistory(TradeSearchCondition condition) {
