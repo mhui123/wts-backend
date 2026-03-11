@@ -62,15 +62,6 @@ public class KiwoomApiController {
         }
     }
 
-    // 관리자만 호출 가능
-    @PostMapping("/admin/setStockCodes")
-    @PreAuthorize("@kiwoomPermissionService.hasPermission(authentication.name, 'ADMIN_USER')")
-    public ResponseEntity<?> syncStockCdsWithMarket() {
-        ProcessResult result = apiService.syncKiwoomStocks();
-        return ResponseEntity.ok().body(result);
-    }
-
-
     @GetMapping("/stocks/master")
     public ResponseEntity<?> getAllStockCodeName(){
         try {

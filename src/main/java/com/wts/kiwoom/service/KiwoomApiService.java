@@ -16,10 +16,13 @@ import com.wts.kiwoom.repository.UserWatchGroupRepository;
 import com.wts.kiwoom.repository.UserWatchListItemRepository;
 import com.wts.util.MapCaster;
 import com.wts.util.UtilsForRequest;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.math.BigDecimal;
 import java.util.*;
@@ -30,6 +33,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class KiwoomApiService {
+    @PersistenceContext
+    private EntityManager em;
+
+    private static final int CHUNK_SIZE = 500;
+
     private final PythonServerService pythonService;
     private final JwtUtil jwtUtil;
     private final MapCaster caster;
@@ -49,6 +57,65 @@ public class KiwoomApiService {
                     .message("키움 로그인 실패: " + e.getMessage())
                     .build();
         }
+    }
+
+    /**
+     * 종목 정보 대량 upsert 저장 (청크 단위 처리)
+     * - AdminService에서 CHUNK_SIZE 단위로 분할된 리스트를 받아 처리
+     * - 호출 측(AdminService)이 청크 분할을 담당하므로 이 메서드는 단일 청크 처리에 집중
+     */
+    @org.springframework.transaction.annotation.Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int[] saveStockCodeInfo(List<StockDto> chunk) {
+        // [insert, update, skip]
+        int[] stat = {0, 0, 0};
+        if (chunk == null || chunk.isEmpty()) return stat;
+
+        // 청크 내 stockCd 목록으로 기존 레코드 bulk 조회 (N+1 방지)
+        List<String> codes = chunk.stream()
+                .map(StockDto::getStockCd)
+                .filter(Objects::nonNull)
+                .toList();
+
+        Map<String, KiwoomStock> existingMap = stockRepo.findByStockCdIn(codes).stream()
+                .collect(Collectors.toMap(KiwoomStock::getStockCd, Function.identity()));
+
+        List<KiwoomStock> toInsert = new ArrayList<>();
+
+        for (StockDto dto : chunk) {
+            if (dto.getStockCd() == null || dto.getStockCd().isBlank()) {
+                stat[2]++;
+                continue;
+            }
+            try {
+                if (existingMap.containsKey(dto.getStockCd())) {
+                    KiwoomStock e = existingMap.get(dto.getStockCd());
+                    e.setStockNm(dto.getStockNm());
+                    e.setMarket(dto.getMarket());
+                    // dirty checking으로 자동 반영
+                    stat[1]++;
+                } else {
+                    toInsert.add(KiwoomStock.builder()
+                            .stockCd(dto.getStockCd())
+                            .stockNm(dto.getStockNm())
+                            .market(dto.getMarket())
+                            .build());
+                    stat[0]++;
+                }
+            } catch (Exception e) {
+                log.error("종목 저장 실패: stockCd={}, error={}", dto.getStockCd(), e.getMessage(), e);
+                stat[2]++;
+            }
+        }
+
+        if (!toInsert.isEmpty()) {
+            stockRepo.saveAll(toInsert);
+        }
+
+        // 1차 캐시 비대화 방지
+        em.flush();
+        em.clear();
+
+        return stat;
     }
 
     public ProcessResult syncKiwoomStocks() {

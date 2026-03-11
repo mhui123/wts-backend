@@ -1,4 +1,4 @@
-package com.wts.kiwoom.entity;
+package com.wts.auth.jpa.entity;
 
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -7,14 +7,14 @@ import lombok.Setter;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "kiwoom_permissions",
+@Table(name = "user_permissions",
         uniqueConstraints = {
-                @UniqueConstraint(name = "ux_kiwoom_permission_unique",
+                @UniqueConstraint(name = "ux_user_permission_unique",
                         columnNames = {"user_id"})
         })
 @Getter
 @Setter
-public class KiwoomPermission {
+public class UserPermission {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -24,7 +24,7 @@ public class KiwoomPermission {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "permission_level")
-    private KiwoomPermissionLevel permissionLevel;
+    private UserPermissionLevel permissionLevel;
 
     @Column(name = "daily_request_limit")
     private Integer dailyRequestLimit = 1000;
@@ -34,7 +34,11 @@ public class KiwoomPermission {
 
     @Column(name = "last_reset_date")
     private LocalDate lastResetDate;
+
+    public enum UserPermissionLevel {
+        BASIC_USER,     // 조회만
+        TRADING_USER,   // 거래 가능
+        ADMIN_USER      // 관리자
+    }
 }
-
-
 

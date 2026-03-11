@@ -151,7 +151,12 @@ public class PythonServerService {
                         if (params != null) {
                             params.forEach((key, value) -> {
                                 if (value != null) {
-                                    uriBuilder.queryParam(key, value);
+                                    // List 타입은 ?key=a&key=b&key=c 형태의 다중 쿼리 파라미터로 직렬화
+                                    if (value instanceof List<?> list) {
+                                        list.forEach(item -> uriBuilder.queryParam(key, item));
+                                    } else {
+                                        uriBuilder.queryParam(key, value);
+                                    }
                                 }
                             });
                         }

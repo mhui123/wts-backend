@@ -1,5 +1,6 @@
 package com.wts.api.web;
 
+import com.wts.admin.service.AdminService;
 import com.wts.api.dto.ProcessResult;
 import com.wts.api.service.PythonServerService;
 import com.wts.kiwoom.service.KiwoomApiService;
@@ -27,6 +28,7 @@ public class TestController {
     private final PythonServerService pythonServerService;
     private final CashflowService cashflowService;
     private final KiwoomApiService kiwoomApiService;
+    private final AdminService adminService;
 
     @GetMapping("/updatePriceTest")
     public ResponseEntity<ProcessResult> updatePriceTest(@RequestParam(name = "userId") Long userId) {
@@ -132,5 +134,15 @@ public class TestController {
     public ResponseEntity<?> syncStockCdsWithMarket() {
         ProcessResult result = kiwoomApiService.syncKiwoomStocks();
         return ResponseEntity.ok().body(result);
+    }
+
+    @GetMapping("/collectDividendInfo")
+    public ProcessResult collectDividendInfo(@RequestParam(name = "symbols", required = false) List<String> symbols) {
+        return adminService.collectDividendInfo(symbols);
+    }
+
+    @GetMapping("/stock/tickers")
+    public ProcessResult getStockCds() {
+        return adminService.syncStockCodes();
     }
 }

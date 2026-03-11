@@ -15,6 +15,7 @@ public class StockDistributionDto {
     private BigDecimal distributionPerShare;
     private BigDecimal rocPct;
     private LocalDate declaredDate;
+    private LocalDate exDate;
     private LocalDate recordDate;
     private LocalDate payableDate;
 

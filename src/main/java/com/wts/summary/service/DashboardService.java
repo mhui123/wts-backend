@@ -20,21 +20,27 @@ import com.wts.summary.jpa.repository.PendingFetchDividendRepository;
 import com.wts.summary.jpa.repository.StockDistributionRepository;
 import com.wts.summary.jpa.repository.SymbolTickerRepository;
 import com.wts.summary.mapper.DashboardAssembler;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @Transactional
 @RequiredArgsConstructor
 public class DashboardService {
+
+    @PersistenceContext
+    private EntityManager em;
+
+    private static final int CHUNK_SIZE = 500; // 청크당 처리 건수
 
     private final JpaPortfolioItemRepository pRepo;
     private final SymbolTickerRepository sRepo;
@@ -220,5 +226,162 @@ public class DashboardService {
                 build();
     }
 
+    public List<String> sendPortfolioSymbolList(){
+        List<PortfolioItemEntity> pList = pRepo.findAll();
+
+        return pList.stream()
+                .map(PortfolioItemEntity::getSymbol)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
+    // 배당 정보 수집이 필요한 종목 목록 조회 (대기 테이블에서 상태가 N인 항목의 ticker 목록)
+    public List<String> sendPendingList(){
+        List<PendingFetchDividend> pList = pendingRepo.findByStatus(YesNo.N);
+
+        return pList.stream()
+                .map(PendingFetchDividend::getTicker)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
+    public void updatePendigList(List<String> tickers){
+        List<PendingFetchDividend> pList = pendingRepo.findByTickerIn(tickers);
+
+        for(PendingFetchDividend p : pList){
+            p.setStatus(YesNo.Y);
+        }
+    }
+
+
+    /**
+     * 대량 배당 정보 upsert 저장
+     * - ticker 그룹 단위로 청크를 나눠 처리하여 메모리 및 트랜잭션 크기 제어
+     * - 청크당 bulk 조회로 N+1 쿼리 방지
+     * - 청크마다 flush + clear로 JPA 1차 캐시 비대화 방지
+     */
+    public ProcessResult saveStockDistribution(List<StockDistributionDto> dtoList) {
+        if (dtoList == null || dtoList.isEmpty()) {
+            return ProcessResult.builder()
+                    .success(false)
+                    .message("저장할 배당 정보가 없습니다.")
+                    .build();
+        }
+
+        // ticker별로 그룹핑 → 순서 유지(LinkedHashMap)
+        Map<String, List<StockDistributionDto>> grouped = dtoList.stream()
+                .filter(dto -> dto.getTicker() != null && dto.getDeclaredDate() != null)
+                .collect(Collectors.groupingBy(StockDistributionDto::getTicker,
+                        LinkedHashMap::new, Collectors.toList()));
+
+        int skippedNullKey = (int) dtoList.stream()
+                .filter(dto -> dto.getTicker() == null || dto.getDeclaredDate() == null)
+                .count();
+
+        // ticker 목록을 CHUNK_SIZE 단위로 분할하여 처리
+        List<String> tickers = new ArrayList<>(grouped.keySet());
+        Map<String, int[]> tickerStat = new LinkedHashMap<>();
+
+        for (int i = 0; i < tickers.size(); i += CHUNK_SIZE) {
+            List<String> chunkTickers = tickers.subList(i, Math.min(i + CHUNK_SIZE, tickers.size()));
+            List<StockDistributionDto> chunkDtos = chunkTickers.stream()
+                    .flatMap(t -> grouped.get(t).stream())
+                    .toList();
+
+            Map<String, int[]> chunkStat = saveChunk(chunkDtos, chunkTickers);
+            tickerStat.putAll(chunkStat);
+
+            log.debug("청크 처리 완료: {}/{} tickers", Math.min(i + CHUNK_SIZE, tickers.size()), tickers.size());
+        }
+
+        // 집계
+        List<Map<String, Object>> statList = tickerStat.entrySet().stream()
+                .map(e -> Map.<String, Object>of(
+                        "ticker", e.getKey(),
+                        "insert", e.getValue()[0],
+                        "update", e.getValue()[1],
+                        "skip",   e.getValue()[2]
+                ))
+                .toList();
+
+        int totalInsert = tickerStat.values().stream().mapToInt(s -> s[0]).sum();
+        int totalUpdate = tickerStat.values().stream().mapToInt(s -> s[1]).sum();
+        int totalSkip   = tickerStat.values().stream().mapToInt(s -> s[2]).sum() + skippedNullKey;
+
+        log.info("배당 정보 전체 저장 완료 - 종목수={}, insert={}, update={}, skip={}",
+                tickerStat.size(), totalInsert, totalUpdate, totalSkip);
+
+        return ProcessResult.builder()
+                .success(true)
+                .message("배당 정보 저장 완료. (신규: %d, 업데이트: %d, 건너뜀: %d)".formatted(totalInsert, totalUpdate, totalSkip))
+                .data(statList)
+                .build();
+    }
+
+    /**
+     * 청크 단위 upsert 처리
+     * - chunkTickers에 해당하는 기존 DB 레코드를 bulk 조회 (N+1 방지)
+     * - 처리 후 flush + clear로 영속성 컨텍스트 정리
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public Map<String, int[]> saveChunk(List<StockDistributionDto> chunkDtos, List<String> chunkTickers) {
+        Map<String, int[]> stat = new LinkedHashMap<>();
+
+        // ticker 목록 전체를 쿼리 1회로 조회 → (ticker + declaredDate) 복합 키로 맵 구성
+        Map<String, StockDistribution> existingMap = disRepo.findByTickerIn(chunkTickers).stream()
+                .collect(Collectors.toMap(
+                        d -> d.getTicker() + "|" + d.getDeclaredDate(),
+                        Function.identity()
+                ));
+
+        List<StockDistribution> toInsert = new ArrayList<>();
+
+        for (StockDistributionDto dto : chunkDtos) {
+            String key = dto.getTicker() + "|" + dto.getDeclaredDate();
+            int[] tickerStat = stat.computeIfAbsent(dto.getTicker(), k -> new int[]{0, 0, 0});
+
+            try {
+                if (existingMap.containsKey(key)) {
+                    // update: dirty checking 활용
+                    StockDistribution entity = existingMap.get(key);
+                    entity.setDistributionPerShare(dto.getDistributionPerShare());
+                    entity.setRocPct(dto.getRocPct());
+                    entity.setExDate(dto.getExDate());
+                    entity.setRecordDate(dto.getRecordDate());
+                    entity.setPayableDate(dto.getPayableDate());
+                    tickerStat[1]++;
+                } else {
+                    // insert: 배치용으로 모아서 saveAll
+                    toInsert.add(StockDistribution.builder()
+                            .ticker(dto.getTicker())
+                            .distributionPerShare(dto.getDistributionPerShare())
+                            .rocPct(dto.getRocPct())
+                            .declaredDate(dto.getDeclaredDate())
+                            .exDate(dto.getExDate())
+                            .recordDate(dto.getRecordDate())
+                            .payableDate(dto.getPayableDate())
+                            .build());
+                    tickerStat[0]++;
+                }
+            } catch (Exception e) {
+                log.error("배당 항목 처리 실패: ticker={}, declaredDate={}, error={}",
+                        dto.getTicker(), dto.getDeclaredDate(), e.getMessage(), e);
+                tickerStat[2]++;
+            }
+        }
+
+        // insert 배치 처리
+        if (!toInsert.isEmpty()) {
+            disRepo.saveAll(toInsert);
+        }
+
+        // 1차 캐시 비대화 방지: 청크 처리 후 flush + clear
+        em.flush();
+        em.clear();
+
+        return stat;
+    }
 
 }
