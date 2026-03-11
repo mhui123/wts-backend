@@ -1,19 +1,20 @@
 package com.wts.summary.service;
 
+import com.wts.api.dto.ProcessResult;
+import com.wts.auth.jpa.entity.User;
+import com.wts.model.TradeSearchCondition;
+import com.wts.summary.domain.service.CashflowDomainService;
 import com.wts.summary.dto.CashflowDetailDto;
 import com.wts.summary.dto.CashflowDto;
-import com.wts.model.TradeSearchCondition;
-import com.wts.summary.enums.*;
+import com.wts.summary.enums.BrokerType;
 import com.wts.summary.enums.Currency;
-import com.wts.summary.jpa.entity.CashflowEntity;
+import com.wts.summary.enums.YesNo;
 import com.wts.summary.jpa.entity.CashflowDetailEntity;
+import com.wts.summary.jpa.entity.CashflowEntity;
 import com.wts.summary.jpa.entity.TradeHistory;
-import com.wts.auth.jpa.entity.User;
-import com.wts.api.dto.ProcessResult;
 import com.wts.summary.jpa.repository.CashFlowDetailRepository;
 import com.wts.summary.jpa.repository.CashFlowRepository;
 import com.wts.summary.jpa.repository.TradeHistoryRepository;
-import com.wts.summary.domain.service.CashflowDomainService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -85,8 +86,8 @@ public class CashflowService {
         return ProcessResult.builder().success(true).data(detailDtos).build();
     }
 
-    public void calculateCashFlow(Long userId, String brokerType) {
-        this.brokerType = BrokerType.valueOf(brokerType.toUpperCase());
+    public void calculateCashFlow(Long userId, BrokerType brokerType) {
+        this.brokerType = brokerType;
         calculate(userId, Currency.KRW);
         calculate(userId, Currency.USD);
     }

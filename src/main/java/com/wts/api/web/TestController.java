@@ -57,7 +57,7 @@ public class TestController {
 
     @GetMapping("/getFlowTest")
     public ResponseEntity<String> getFlowTest(@RequestParam(name = "userId") Long userId,
-                                              @RequestParam(name = "brokerType") String brokerType
+                                              @RequestParam(name = "brokerType") BrokerType brokerType
     ) {
         cashflowService.calculateCashFlow(userId, brokerType);
         return ResponseEntity.ok("OK");

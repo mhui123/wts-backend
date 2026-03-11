@@ -2,11 +2,12 @@ package com.wts.api.web;
 
 import com.wts.api.dto.ProcessResult;
 import com.wts.api.dto.StockPriceResponseDto;
+import com.wts.api.service.PythonServerService;
+import com.wts.auth.JwtUtil;
 import com.wts.summary.dto.TradeHistoryUploadDto;
 import com.wts.summary.enums.BrokerType;
+import com.wts.summary.service.CashflowService;
 import com.wts.summary.service.TradeHistoryService;
-import com.wts.auth.JwtUtil;
-import com.wts.api.service.PythonServerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -24,6 +25,7 @@ import java.util.List;
 public class PythonController {
 
     private final PythonServerService pythonServerService;
+    private final CashflowService cashflowService;
     private final TradeHistoryService tService;
     private final JwtUtil jwtUtil;
 
@@ -88,6 +90,7 @@ public class PythonController {
             ProcessResult response = pythonServerService.uploadTradeHistory(uploadDto, broker);
             if(response.isSuccess()){
                 tService.summarizeTradeHistoryAsEachStocks(userId, broker);
+                cashflowService.calculateCashFlow(userId, broker);
             }
 
             return ResponseEntity.ok(response);
