@@ -39,6 +39,7 @@ public class CashflowService {
     private final CashflowDomainService cashflowDomainService;
     private BrokerType brokerType;
     private List<CashflowEntity> needCalculates;
+    private String state = "INIT";
 
     public ProcessResult getCashFlow(Long userId, LocalDate startYm, LocalDate endYm) {
         startYm = startYm.withDayOfMonth(1); //날짜를 1일로 보정.
@@ -149,6 +150,7 @@ public class CashflowService {
             } else {
                 // Y 이력이 없으면 needCalculates 기준으로 계산 (안전 fallback)
                 if (needCalculates.isEmpty()) {
+                    state = "PASS";
                     log.info("계산 대상이 없습니다. userId={}, currency={}", userId, currency);
                     return;
                 }
@@ -159,6 +161,7 @@ public class CashflowService {
             flowCondition.setStartDate(startYm);
             flowCondition.setEndDate(endYm.withDayOfMonth(endYm.lengthOfMonth()));
 
+            state = "CALCULATE";
             log.info("Cashflow 계산 구간 확정. userId={}, currency={}, startYm={}, endYm={}",
                     userId, currency, startYm, endYm);
         }
@@ -166,7 +169,11 @@ public class CashflowService {
         List<TradeHistory> flows = tradeHistoryService.getHistoryWithinConditions(flowCondition);
 
         settingCashFlow(flows, currency);
-
+        if(state.equals("INIT")){
+            //최초입력 상태. cashflow_master 데이터 조회.
+            needCalculates = cashFlowRepository.findByUserIdAndCurrencyAndCalculateFlag(userId, currency, YesNo.N)
+                    .orElse(Collections.emptyList());
+        }
         deployCashFlowDetail(flows, currency);
         summarizeDetailToMaster(currency);
     }
@@ -228,6 +235,7 @@ public class CashflowService {
     public void summarizeDetailToMaster(Currency currency){
         LocalDate today = LocalDate.now();
         BigDecimal previousEndAmount = BigDecimal.ZERO;
+
         for (CashflowEntity cashflowEntity : needCalculates) {
             List<CashflowDetailEntity> details = cashFlowDetailRepository.findByCashflowEntity(cashflowEntity);
             cashflowDomainService.updateMonthlySummary(cashflowEntity, previousEndAmount, details, currency, today);

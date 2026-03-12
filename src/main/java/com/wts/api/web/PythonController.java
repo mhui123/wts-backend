@@ -126,6 +126,7 @@ public class PythonController {
             ProcessResult response = pythonServerService.uploadKiwoomTradeHistory(uploadDto, broker);
             if(response.isSuccess()){
                 tService.summarizeTradeHistoryAsEachStocks(userId, broker);
+                cashflowService.calculateCashFlow(userId, broker);
             }
 
             return ResponseEntity.ok(response);
@@ -183,6 +184,7 @@ public class PythonController {
 
             if(response.isSuccess()){
                 tService.summarizeTradeHistoryAsEachStocks(userId, brokerType);
+                cashflowService.calculateCashFlow(userId, brokerType);
             }
             return ResponseEntity.ok(response);
         } catch (Exception e) {

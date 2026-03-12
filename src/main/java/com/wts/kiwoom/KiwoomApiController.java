@@ -75,7 +75,7 @@ public class KiwoomApiController {
 
     @GetMapping("/watchList/groups/{userId}")
     @PreAuthorize("@kiwoomPermissionService.hasPermission(#userId, 'BASIC_USER')")
-    public ResponseEntity<?> getUserWatchListGroups(HttpServletRequest request){
+    public ResponseEntity<?> getUserWatchListGroups(@PathVariable String userId, HttpServletRequest request){
         try {
             String jwt;
             jwt = uRe.attractJwtFromRequest(request);
@@ -183,7 +183,9 @@ public class KiwoomApiController {
 
     @PostMapping("/realtime/subscribe/{userId}")
     @PreAuthorize("@kiwoomPermissionService.hasPermission(#userId, 'BASIC_USER')")
-    public ResponseEntity<?> subscribePriceData(@RequestBody WatchListDto dto, HttpServletRequest request) {
+    public ResponseEntity<?> subscribePriceData(
+            @PathVariable String userId,
+            @RequestBody WatchListDto dto, HttpServletRequest request) {
 //        long startTime = System.currentTimeMillis();
 
         String jwt = uRe.attractJwtFromRequest(request);
@@ -222,7 +224,9 @@ public class KiwoomApiController {
 
     @PostMapping("/realtime/unsubscribe/{userId}")
     @PreAuthorize("@kiwoomPermissionService.hasPermission(#userId, 'BASIC_USER')")
-    public ResponseEntity<?> unsubscribePriceData(@RequestBody WatchListDto dto, HttpServletRequest request) {
+    public ResponseEntity<?> unsubscribePriceData(
+            @PathVariable String userId,
+            @RequestBody WatchListDto dto, HttpServletRequest request) {
 //        long startTime = System.currentTimeMillis();
 
         String jwt = uRe.attractJwtFromRequest(request);

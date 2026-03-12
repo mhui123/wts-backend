@@ -16,8 +16,7 @@ public class PortfolioScheduler {
     @Scheduled(cron = "0 0 2 * * *")
     public void updatePortfolio() {
         log.info("[Scheduler] portfolio update started");
-        // 작업 내용 : portfolio 업데이트 로직 구현
-        pythonServerService.syncSymbolNameAndTicker();
+        pythonServerService.syncSymbolNameAndTicker(); // 티커 누락 항목 업데이트
         log.info("[Scheduler] portfolio update finished");
     }
 //

@@ -61,7 +61,13 @@
 - 클라이언트는 `/topic/quotes` 구독으로 실시간 데이터 수신
 
 ### 스케줄러
-- 매일 새벽 2시: 종목 심볼-티커 매핑 테이블 자동 동기화 (`PortfolioScheduler`)
+- 매일 새벽 2시: 
+  - 종목 심볼-티커 매핑 테이블과 자동 동기화 (`PortfolioScheduler`)
+  - 배당 정보 최신화 ('StockInfoScheduler - updateDividendInfo')
+- 매일 0시 :
+  - 배당정보 없는 종목 데이터 입력 ('StockInfoScheduler - updateDividendInfo') 
+- 매일 6시 :
+  - 종목 코드 정보 최신화 ('StockInfoScheduler - syncStockCodes')
 
 ---
 
@@ -85,7 +91,7 @@
         │
         ├──▶ [MySQL 8.0 :3546]   - 거래 이력, 포트폴리오, 사용자 등 영속 데이터
         ├──▶ [Redis :6379]       - 실시간 시세 Pub/Sub
-        └──▶ [Python 어댑터 :8000/:19987] - 키움 API 실제 호출
+        └──▶ [Python 어댑터 :8000/:19987] - 외부 api 데이터 요청처리와 키움 API 실제 호출 담당
 ```
 
 ---
@@ -182,10 +188,7 @@ com.wts
 | `GOOGLE_CLIENT_SECRET` | Google OAuth2 클라이언트 시크릿 | `GOCSPX-...` |
 | `KIWOOM_ENCRYPTION_SECRET` | 키움 API 키 암호화 비밀키 (최소 32자) | `your-32-character-secret-key!!` |
 | `KIWOOM_ENCRYPTION_SALT` | 암호화 Salt (32자리 HEX) | `0123456789abcdef0123456789abcdef` |
-| `SPRING_DATA_REDIS_HOST` | Redis 호스트 (기본값: localhost) | `localhost` |
-| `SPRING_DATA_REDIS_PORT` | Redis 포트 (기본값: 6379) | `6379` |
-| `EXTERNAL_PYTHON_SERVER_BASE_URL` | Python 어댑터 URL | `http://localhost:8000` |
-| `EXTERNAL_PYTHON_SERVER_PY32_URL` | Python 32비트 어댑터 URL | `http://localhost:19987` |
+| `APP_JWT_SECRET` | Base64 (32 byte secret) | `ZzZom3eUKnYlqRRM0eOc9q7LonelL76hO5f2GKTZMQ0=` |
 
 ---
 
@@ -205,6 +208,7 @@ $env:GOOGLE_CLIENT_ID = "your-client-id"
 $env:GOOGLE_CLIENT_SECRET = "your-client-secret"
 $env:KIWOOM_ENCRYPTION_SECRET = "your-32-character-secret-key!!"
 $env:KIWOOM_ENCRYPTION_SALT = "0123456789abcdef0123456789abcdef"
+$env:APP_JWT_SECRET = "ZzZom3eUKnYlqRRM0eOc9q7LonelL76hO5f2GKTZMQ0="
 
 # 애플리케이션 실행
 ./gradlew bootRun

@@ -19,17 +19,15 @@ public class StockInfoScheduler {
     // 매일 새벽 2시
     @Scheduled(cron = "0 0 2 * * *")
     public void updateDividendInfo() {
-        log.info("[StockInfoScheduler] collectDividendInfo started");
-        // 작업 내용 : portfolio 업데이트 로직 구현
+        log.info("[StockInfoScheduler] updateDividendInfo started");
         List<String> symbols = dashboardService.sendPortfolioSymbolList();
         adminService.collectDividendInfo(symbols);
-        log.info("[StockInfoScheduler] collectDividendInfo finished");
+        log.info("[StockInfoScheduler] updateDividendInfo finished");
     }
 
     @Scheduled(cron = "0 0 0 * * *") // 매일 자정
     public void processPendingDivInfo() {
         log.info("[StockInfoScheduler] processPendingDivInfo started");
-        // 작업 내용 : portfolio 업데이트 로직 구현
         List<String> symbols = dashboardService.sendPendingList();
         adminService.collectDividendInfo(symbols);
         dashboardService.updatePendigList(symbols);

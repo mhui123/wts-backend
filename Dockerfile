@@ -1,38 +1,56 @@
-# Eclipse Temurin Java 17 사용 (OpenJDK 공식 후속)
-FROM eclipse-temurin:17-jdk
+# ============================================================
+# Stage 1: Build  (Gradle로 소스 컴파일 → bootJar 생성)
+# ============================================================
+FROM eclipse-temurin:17-jdk AS builder
 
-# 작업 디렉토리 설정
 WORKDIR /app
 
-# 시간대 설정
+# Gradle wrapper 및 설정 파일을 먼저 복사 (의존성 레이어 캐시 활용)
+COPY gradlew gradlew.bat* ./
+COPY gradle/ gradle/
+COPY build.gradle settings.gradle ./
+
+RUN chmod +x gradlew
+
+# 의존성만 먼저 다운로드 (소스 미변경 시 캐시 재사용)
+RUN ./gradlew dependencies --no-daemon -q
+
+# 소스 코드 복사 후 JAR 빌드 (테스트 제외)
+COPY src/ src/
+RUN ./gradlew bootJar -x test --no-daemon
+
+# ============================================================
+# Stage 2: Runtime  (JRE 경량 이미지)
+# ============================================================
+FROM eclipse-temurin:17-jre
+
+WORKDIR /app
+
 ENV TZ=Asia/Seoul
 
-# 필요한 패키지 설치 (헬스체크 및 디버깅용)
+# curl (헬스체크용)
 RUN apt-get update && \
-    apt-get install -y curl netcat-traditional redis-tools && \
+    apt-get install -y curl && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# 애플리케이션 사용자 생성 (보안 강화)
+# 애플리케이션 전용 사용자 생성 (보안)
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
-# JAR 파일 복사 (Gradle은 build/libs 디렉토리에 생성)
-COPY build/libs/*.jar app.jar
+# 빌드 스테이지에서 JAR 복사
+COPY --from=builder /app/build/libs/*.jar app.jar
 
-# 파일 소유권 변경
 RUN chown appuser:appuser app.jar
 
-# 포트 노출 (application.yml의 server.port 설정에 맞춤: 9789)
+# 포트 노출 (application.yml server.port: 9789)
 EXPOSE 9789
 
-# 헬스체크 추가 (더 안정적인 설정)
+# 헬스체크
 HEALTHCHECK --interval=45s --timeout=10s --start-period=120s --retries=3 \
   CMD curl -f http://localhost:9789/actuator/health || exit 1
 
-# 애플리케이션 사용자로 전환
 USER appuser
 
-# JVM 옵션 설정 및 애플리케이션 실행
 ENTRYPOINT ["java", \
     "-Xms512m", \
     "-Xmx1024m", \
