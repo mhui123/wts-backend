@@ -35,7 +35,7 @@ public class GuestService {
     @Transactional
     public User createGuestSession() {
         User guest;
-        Optional<User> g = userRepository.findByRoles("ROLE_GUEST");
+        Optional<User> g = userRepository.findById(1L); // ID 1번은 게스트 사용자로 고정
         if(g.isPresent()) {
             guest = g.get();
         } else {
