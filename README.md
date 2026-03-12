@@ -85,7 +85,12 @@
   │     ├── /api/dash       - 대시보드 / 포트폴리오
   │     ├── /api/th         - 거래 이력
   │     ├── /api/kiwoom     - 키움 API 프록시
-  │     └── /api/kiwoom/auth - 키움 인증
+  │     ├── /api/kiwoom/auth - 키움 인증
+  │     └── /api/admin      - 관리자 기능
+  ├── Scheduler
+  │     ├── PortfolioScheduler  - 포트폴리오 동기화
+  │     ├── StockInfoScheduler  - 종목 코드 / 배당 정보 최신화
+  │     └── TokenScheduler      - 키움 토큰 갱신
   ├── WebSocket Broker (/ws → /topic/quotes)
   └── Redis Subscriber (realtime_price_data)
         │
@@ -100,80 +105,115 @@
 
 ```
 com.wts
+├── admin/
+│   ├── controller/
+│   │   └── AdminController         # 관리자 전용 API
+│   ├── mapper/
+│   │   └── AdminAssembler
+│   └── service/
+│       └── AdminService
 ├── api/
-│   ├── dto/          # OrderRequest, StockInfo, PythonRequestDto 등
-│   ├── entity/       # Order (JPA 엔티티)
-│   ├── repository/   # OrderRepository
+│   ├── dto/                        # ProcessResult, PythonRequestDto, StockInfo 등
+│   ├── entity/                     # Order (JPA 엔티티)
+│   ├── repository/                 # OrderRepository
 │   ├── service/
-│   │   ├── PythonServerService   # Python 어댑터 WebClient 통신
-│   │   └── RedisSubscriberService # Redis → WebSocket 브릿지
+│   │   ├── PythonServerService     # Python 어댑터 WebClient 통신
+│   │   └── RedisSubscriberService  # Redis → WebSocket 브릿지
 │   └── web/
 │       ├── PythonController
 │       └── TestController
 ├── auth/
 │   ├── controller/
-│   │   ├── AccountController   # 로그인, 회원가입, 내 정보
-│   │   └── GuestController     # 게스트 로그인, 대시보드
-│   ├── dto/                    # JwtResponse, RegisterRequest
+│   │   ├── AccountController       # 로그인, 회원가입, 내 정보
+│   │   └── GuestController         # 게스트 로그인, 대시보드
+│   ├── dto/                        # JwtResponse, RegisterRequest
 │   ├── jpa/
-│   │   ├── entity/User
-│   │   └── repository/UserRepository
+│   │   ├── entity/
+│   │   │   ├── User
+│   │   │   └── UserPermission
+│   │   └── repository/
+│   │       └── UserRepository
 │   ├── security/
 │   │   ├── CustomOAuth2UserService
 │   │   ├── JwtAuthenticationFilter
 │   │   └── OAuth2AuthenticationSuccessHandler
 │   ├── service/
-│   │   ├── AccountService      # 계정 비즈니스 로직
-│   │   └── GuestService        # 게스트 사용자 처리
+│   │   ├── AccountService          # 계정 비즈니스 로직
+│   │   ├── GuestService            # 게스트 사용자 처리
+│   │   └── UserPermissionRepository
 │   └── JwtUtil
 ├── config/
-│   ├── SecurityConfig          # Spring Security 필터 체인
-│   ├── WebSocketConfig         # STOMP /ws 엔드포인트
-│   ├── WebClientConfig         # Python 어댑터용 WebClient Bean
-│   ├── WebConfig               # MVC 설정
-│   ├── SpaWebConfig            # SPA 정적 리소스 라우팅
-│   ├── RedisConfig             # Redis 연결 및 리스너 설정
-│   └── QuerydslConfig          # Querydsl JPAQueryFactory
+│   ├── SecurityConfig              # Spring Security 필터 체인
+│   ├── WebSocketConfig             # STOMP /ws 엔드포인트
+│   ├── WebClientConfig             # Python 어댑터용 WebClient Bean
+│   ├── WebConfig                   # MVC 설정
+│   ├── SpaWebConfig                # SPA 정적 리소스 라우팅
+│   ├── RedisConfig                 # Redis 연결 및 리스너 설정
+│   └── QuerydslConfig              # Querydsl JPAQueryFactory
 ├── kiwoom/
-│   ├── KiwoomApiController     # /api/kiwoom/** REST API
-│   ├── KiwoomAuthController    # 키움 인증 관련 API
-│   ├── dto/                    # KeyDto, WatchListDto, StockDto 등
-│   ├── entity/                 # KiwoomApiKey, KiwoomToken, UserWatchGroup 등
-│   ├── interceptor/            # KiwoomPermissionInterceptor
-│   ├── repository/             # 키움 관련 JPA Repository
+│   ├── KiwoomApiController         # /api/kiwoom/** REST API
+│   ├── KiwoomAuthController        # 키움 인증 관련 API
+│   ├── dto/                        # KeyDto, WatchListDto, StockDto, KiwoomApiRequest 등
+│   ├── entity/                     # KiwoomApiKey, KiwoomToken, KiwoomStock,
+│   │                               # KiwoomAuditLog, KiwoomPermission, KiwoomStatus,
+│   │                               # UserWatchGroup, UserWatchListItem 등
+│   ├── interceptor/
+│   │   └── KiwoomPermissionInterceptor
+│   ├── repository/                 # KiwoomApiKeyRepository, KiwoomAuditRepository,
+│   │                               # KiwoomPermissionRepository, KiwoomStockRepository,
+│   │                               # KiwoomTokenRepository, UserWatchGroupRepository,
+│   │                               # UserWatchListItemRepository
 │   └── service/
-│       ├── KiwoomApiService    # 키움 API 비즈니스 로직
-│       ├── KiwoomAuditService  # API 호출 감사 로그
-│       ├── KiwoomKeyService    # API 키 암호화/복호화
+│       ├── KiwoomApiService        # 키움 API 비즈니스 로직
+│       ├── KiwoomAuditService      # API 호출 감사 로그
+│       ├── KiwoomKeyService        # API 키 암호화/복호화
 │       ├── KiwoomPermissionService # 권한 레벨 검증
-│       ├── KiwoomPublicService # 인증 불필요 공개 서비스
-│       └── KiwoomTokenManager  # 키움 토큰 수명 관리
-├── model/                      # Money, Quantity, TradeHistoryVO 등 도메인 모델
+│       ├── KiwoomPublicService     # 인증 불필요 공개 서비스
+│       └── KiwoomTokenManager      # 키움 토큰 수명 관리
+├── model/                          # Money, Quantity, TradeHistoryVO,
+│                                   # PortfolioPositionVO, TradeSearchCondition, TradeType
 ├── scheduler/
-│   └── PortfolioScheduler      # 주기적 포트폴리오 동기화
+│   ├── PortfolioScheduler          # 포트폴리오 자동 동기화 (매일 새벽 2시)
+│   ├── StockInfoScheduler          # 종목 코드 / 배당 정보 최신화
+│   └── TokenScheduler              # 키움 토큰 갱신
 ├── summary/
-│   ├── adapter/                # TradeHistoryNdjsonAdapter
+│   ├── adapter/
+│   │   └── TradeHistoryNdjsonAdapter
 │   ├── controller/
 │   │   ├── DashboardController
 │   │   └── TradeHistoryController
 │   ├── domain/
-│   │   ├── cashflow/
-│   │   ├── portfolio/          # Portfolio, PortfolioItem
-│   │   └── service/            # CashflowDomainService, TradeHistoryDomainService
-│   ├── dto/                    # DashboardSummaryDto, CashflowDto, TradeHistoryDto 등
-│   ├── enums/                  # BrokerType, Currency, FlowType, FlowCategory 등
+│   │   ├── portfolio/              # Portfolio, PortfolioItem
+│   │   ├── service/                # CashflowDomainService, TradeHistoryDomainService
+│   │   ├── Inoutcom
+│   │   ├── PortfolioItemUpdater
+│   │   └── StockTradeAggregator
+│   ├── dto/                        # DashboardSummaryDto, CashflowDto, CashflowDetailDto,
+│   │                               # TradeHistoryDto, PortfolioItemDto, StockDetailDto 등
+│   ├── enums/                      # BrokerType, Currency, FlowType, FlowCategory,
+│   │                               # InOut, KiwoomTypes, TossTypes, YesNo
 │   ├── jpa/
-│   │   ├── entity/             # TradeHistory, CashflowEntity, PortfolioItemEntity 등
-│   │   └── repository/         # JPA Repository + Specification
-│   ├── mapper/                 # DashboardAssembler
+│   │   ├── entity/                 # TradeHistory, CashflowEntity, CashflowDetailEntity,
+│   │   │                           # PortfolioItemEntity, StockDistribution,
+│   │   │                           # SymbolTicker, PendingFetchDividend
+│   │   ├── mapper/
+│   │   │   └── PortfolioMapper
+│   │   └── repository/             # TradeHistoryRepository, CashFlowRepository,
+│   │       │                       # CashFlowDetailRepository, JpaPortfolioItemRepository,
+│   │       │                       # StockDistributionRepository, SymbolTickerRepository,
+│   │       │                       # PendingFetchDividendRepository
+│   │       └── query/
+│   │           └── TradeHistorySpecification
+│   ├── mapper/
+│   │   └── DashboardAssembler
 │   └── service/
 │       ├── CashflowService
 │       ├── DashboardService
 │       └── TradeHistoryService
 └── util/
-    ├── MapCaster               # Map 타입 변환 유틸
-    ├── PortfolioCalculator     # 포트폴리오 수익률 계산
-    └── UtilsForRequest         # 요청 관련 유틸
+    ├── MapCaster                   # Map 타입 변환 유틸
+    ├── PortfolioCalculator         # 포트폴리오 수익률 계산
+    └── UtilsForRequest             # 요청 관련 유틸
 ```
 
 ---
@@ -182,13 +222,13 @@ com.wts
 
 애플리케이션 실행 전 아래 환경 변수를 설정해야 합니다.
 
-| 환경 변수 | 설명 | 예시 |
-|-----------|------|------|
-| `GOOGLE_CLIENT_ID` | Google OAuth2 클라이언트 ID | `xxx.apps.googleusercontent.com` |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth2 클라이언트 시크릿 | `GOCSPX-...` |
-| `KIWOOM_ENCRYPTION_SECRET` | 키움 API 키 암호화 비밀키 (최소 32자) | `your-32-character-secret-key!!` |
+| 환경 변수 | 설명 | 예시                                |
+|-----------|------|-----------------------------------|
+| `GOOGLE_CLIENT_ID` | Google OAuth2 클라이언트 ID | `xxx.apps.googleusercontent.com`  |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth2 클라이언트 시크릿 | `GOCSPX-...`                      |
+| `KIWOOM_ENCRYPTION_SECRET` | 키움 API 키 암호화 비밀키 (최소 32자) | `your-32-character-secret-key!!`  |
 | `KIWOOM_ENCRYPTION_SALT` | 암호화 Salt (32자리 HEX) | `0123456789abcdef0123456789abcdef` |
-| `APP_JWT_SECRET` | Base64 (32 byte secret) | `ZzZom3eUKnYlqRRM0eOc9q7LonelL76hO5f2GKTZMQ0=` |
+| `APP_JWT_SECRET` | Base64 (32 byte secret) | `32바이트의 키`                        |
 
 ---
 
@@ -208,7 +248,7 @@ $env:GOOGLE_CLIENT_ID = "your-client-id"
 $env:GOOGLE_CLIENT_SECRET = "your-client-secret"
 $env:KIWOOM_ENCRYPTION_SECRET = "your-32-character-secret-key!!"
 $env:KIWOOM_ENCRYPTION_SALT = "0123456789abcdef0123456789abcdef"
-$env:APP_JWT_SECRET = "ZzZom3eUKnYlqRRM0eOc9q7LonelL76hO5f2GKTZMQ0="
+$env:APP_JWT_SECRET = "32바이트의 키"
 
 # 애플리케이션 실행
 ./gradlew bootRun
