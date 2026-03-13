@@ -2,6 +2,9 @@
 /.gradle/
 /build/
 
+# 프론트엔드 빌드 결과물 (Docker 또는 npm run build:backend 로 자동 생성)
+/src/main/resources/static/
+
 # IDE
 /.idea/
 *.iml
