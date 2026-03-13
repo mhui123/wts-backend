@@ -10,7 +10,7 @@ COPY gradlew gradlew.bat* ./
 COPY gradle/ gradle/
 COPY build.gradle settings.gradle ./
 
-RUN chmod +x gradlew
+RUN chmod +x gradlew && sed -i 's/\r$//' gradlew
 
 # 의존성만 먼저 다운로드 (소스 미변경 시 캐시 재사용)
 RUN ./gradlew dependencies --no-daemon -q
